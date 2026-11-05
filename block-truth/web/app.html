@@ -1,0 +1,2165 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Block Completion Time</title>
+<style>
+/* No webfont on purpose. This runs in depots and on laptops with no route to
+   the internet, and a page that waits on fonts.googleapis.com before it will
+   draw is a page that does not work there. The stacks below are what the
+   machine already has. */
+/* A workbench, not a dashboard: one block at a time, its map beside its numbers.
+   Measured things are blue and square-edged; forecast things are amber and dashed,
+   everywhere, without exception. */
+:root{
+  --plane:#f5f5f2; --surface:#fcfcfb; --raised:#fff;
+  --ink:#0d0d0c; --ink-2:#55544f; --muted:#8b8984;
+  --grid:#e3e2db; --axis:#c5c4b9; --hair:rgba(13,13,12,.11);
+  --truth:#1f6fd0; --truth-soft:rgba(31,111,208,.12);
+  --est:#c77a12; --est-soft:rgba(199,122,18,.13);
+  --good:#15873d; --bad:#c4362f; --warn:#c08a0a;
+  --display:'Avenir Next','Segoe UI Variable Display','Helvetica Neue',system-ui,
+            'Segoe UI',Roboto,Arial,sans-serif;
+  --body:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono','Cascadia Mono','JetBrains Mono','DejaVu Sans Mono',
+         Menlo,Consolas,monospace;
+}
+:root:not([data-theme="light"]){@media (prefers-color-scheme:dark){:root{
+  --plane:#131312; --surface:#1a1a18; --raised:#212120;
+  --ink:#f2f1ec; --ink-2:#bdbcb5; --muted:#86847d;
+  --grid:#2c2c29; --axis:#43423d; --hair:rgba(242,241,236,.13);
+  --truth:#63a4ea; --truth-soft:rgba(99,164,234,.16);
+  --est:#e2a444; --est-soft:rgba(226,164,68,.17);
+  --good:#4cc072; --bad:#e8665e; --warn:#dfae3c;
+}}}
+:root[data-theme="dark"]{
+  --plane:#131312; --surface:#1a1a18; --raised:#212120;
+  --ink:#f2f1ec; --ink-2:#bdbcb5; --muted:#86847d;
+  --grid:#2c2c29; --axis:#43423d; --hair:rgba(242,241,236,.13);
+  --truth:#63a4ea; --truth-soft:rgba(99,164,234,.16);
+  --est:#e2a444; --est-soft:rgba(226,164,68,.17);
+  --good:#4cc072; --bad:#e8665e; --warn:#dfae3c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);font-family:var(--body);
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1500px;margin:0 auto;padding:22px 20px 80px}
+h1{font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0}
+h2{font-family:var(--display);font-size:17px;font-weight:600;letter-spacing:-.01em;margin:0 0 2px}
+h3{font-family:var(--display);font-size:13.5px;font-weight:600;margin:0 0 8px}
+p{margin:0 0 10px;color:var(--ink-2)}
+.sub{color:var(--muted);font-size:13px}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--muted)}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between;
+  margin-bottom:14px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--hair);color:var(--ink-2)}
+.tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--hair);
+  margin-bottom:20px;position:sticky;top:0;background:var(--plane);z-index:40}
+.tab{font:inherit;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;
+  background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px 9px;
+  margin-bottom:-1px}
+.tab:hover{color:var(--ink-2)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--truth);font-weight:600}
+.panel{min-width:0;background:var(--surface);border:1px solid var(--hair);border-radius:11px;padding:15px}
+.grid{display:grid;gap:15px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.split{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:15px}
+@media (max-width:1050px){.split{grid-template-columns:minmax(0,1fr)}}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select,input,button,textarea{font:inherit;font-size:13px;color:var(--ink);
+  background:var(--raised);border:1px solid var(--hair);border-radius:7px;padding:7px 9px}
+input[type=number]{width:108px}
+button{cursor:pointer;background:var(--surface)}
+button:hover{border-color:var(--axis)}
+button.primary{background:var(--truth);border-color:var(--truth);color:#fff;font-weight:600}
+button.primary:hover{filter:brightness(1.07)}
+button.danger{color:var(--bad)}
+button:disabled{opacity:.5;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--hair);text-align:left}
+th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);font-weight:500;white-space:nowrap}
+td.num,th.num{text-align:right}
+td.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+tbody tr.pick{cursor:pointer}
+tbody tr.pick:hover{background:var(--plane)}
+tbody tr.on{background:var(--truth-soft)}
+.tablewrap{overflow:auto;border:1px solid var(--hair);border-radius:10px;background:var(--surface);
+  max-height:460px}
+.badge{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px;font-weight:600}
+.badge.truth{background:var(--truth-soft);color:var(--truth)}
+.badge.est{background:var(--est-soft);color:var(--est)}
+.badge.ok{background:rgba(21,135,61,.13);color:var(--good)}
+.badge.fail{background:rgba(196,54,47,.13);color:var(--bad)}
+.big{font-family:var(--display);font-size:38px;font-weight:600;letter-spacing:-.025em;
+  font-variant-numeric:tabular-nums;line-height:1.1}
+.big.est{color:var(--est)}
+.rangeline{font-family:var(--mono);font-size:13px;color:var(--ink-2);margin-top:2px}
+.kv{display:flex;justify-content:space-between;gap:14px;padding:5px 0;
+  border-bottom:1px dotted var(--hair);font-size:12.5px}
+.kv .k{color:var(--muted)}
+.kv .v{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.stack{display:flex;height:26px;border-radius:6px;overflow:hidden;border:1px solid var(--hair)}
+.stack div{display:flex;align-items:center;justify-content:center;font-family:var(--mono);
+  font-size:10px;color:#fff;overflow:hidden}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);
+  align-items:center;margin-top:8px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block;margin-right:5px;
+  vertical-align:-1px}
+.map{width:100%;height:auto;background:var(--raised);border:1px solid var(--hair);
+  border-radius:10px;display:block;touch-action:none}
+.map .leg{stroke:var(--axis);stroke-width:1.6;fill:none}
+.map .leg.home{stroke-dasharray:5 4}
+.map text{font-family:var(--mono);font-size:9.5px;fill:var(--muted)}
+.map .num{font-size:9px;font-weight:600;fill:#fff}
+.map .node{cursor:pointer}
+.map .node.on circle:first-of-type{stroke:var(--ink);stroke-width:2.5}
+#tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .09s;z-index:90;
+  background:var(--raised);border:1px solid var(--hair);border-radius:9px;padding:9px 11px;
+  font-size:12px;box-shadow:0 10px 28px rgba(0,0,0,.18);max-width:290px}
+#tip .t{font-weight:600;margin-bottom:4px}
+#tip .r{display:flex;justify-content:space-between;gap:14px;color:var(--muted)}
+#tip .r b{color:var(--ink);font-family:var(--mono)}
+.note{font-size:12.5px;color:var(--ink-2);background:var(--plane);border:1px solid var(--hair);
+  border-left:3px solid var(--est);border-radius:7px;padding:10px 12px;margin:10px 0}
+.note.truth{border-left-color:var(--truth)}
+.err{color:var(--bad);font-size:12.5px}
+.ok{color:var(--good)}
+.empty{color:var(--muted);text-align:center;padding:40px 10px;font-size:13px}
+#boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:var(--plane);color:var(--muted);z-index:100;padding:24px;text-align:center}
+.hidden{display:none !important}
+.steps{display:flex;gap:7px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--muted)}
+.steps b{color:var(--ink)}
+.drop{border:2px dashed var(--hair);border-radius:11px;padding:28px;text-align:center;
+  background:var(--surface);cursor:pointer}
+.drop.over{border-color:var(--truth);background:var(--truth-soft)}
+.legend .sw{width:11px;height:11px;border-radius:3px;display:inline-block;margin-right:5px;
+  vertical-align:-1px}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
+.switch{display:inline-flex;border:1px solid var(--hair);border-radius:8px;overflow:hidden}
+.segbtn{border:0;background:var(--surface);font:inherit;font-size:12px;padding:5px 12px;
+  cursor:pointer;color:var(--muted)}
+.segbtn+.segbtn{border-left:1px solid var(--hair)}
+.segbtn.on{background:var(--est-soft);color:var(--est);font-weight:600}
+.leaflet-container{font:inherit;background:var(--plane)}
+.split2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:760px){.split2{grid-template-columns:minmax(0,1fr)}}
+
+/* the strip of days across the top of the month tab */
+.daystrip{display:flex;gap:6px;overflow-x:auto;padding:4px 2px 10px;margin-top:12px}
+.day{flex:0 0 auto;min-width:74px;border:1px solid var(--hair);border-radius:9px;
+  background:var(--surface);padding:7px 8px;cursor:pointer;text-align:left;
+  font-family:inherit;color:inherit}
+.day:hover{border-color:var(--est)}
+.day[aria-pressed="true"]{border-color:var(--est);background:var(--est-soft);
+  box-shadow:inset 0 0 0 1px var(--est)}
+.day .d{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.day .h{font-family:var(--display);font-size:15px;font-weight:600;margin-top:1px}
+.day .n{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.day .warn{color:var(--bad)}
+
+/* the itinerary options, side by side */
+.opts{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(192px,1fr));
+  align-items:stretch}
+.opt{min-width:0}
+.opt{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;cursor:pointer;
+  background:var(--surface);text-align:left;font-family:inherit;color:inherit}
+.opt:hover{border-color:var(--est)}
+.opt[aria-pressed="true"]{border-color:var(--est);box-shadow:inset 0 0 0 1px var(--est)}
+.opt .nm{font-weight:600;font-size:13px;margin-bottom:3px}
+.opt .big2{font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:-.02em}
+.opt .sub{font-size:11.5px;line-height:1.45}
+.opt .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--good);display:block;margin-top:5px}
+.opt .pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px}
+.pill{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 6px;border-radius:999px;font-weight:600;border:1px solid}
+.pill.chosen{color:var(--good);border-color:var(--good);background:rgba(21,135,61,.1)}
+.pill.rec{color:var(--est);border-color:var(--est);background:var(--est-soft)}
+.opt.is-chosen{border-color:var(--good);box-shadow:inset 0 0 0 1px var(--good)}
+button.use{font-weight:600}
+/* the key to the overlaid routes */
+.routekey{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);
+  align-items:center;margin:8px 0 2px}
+.routekey i{width:22px;height:0;border-top-width:2px;border-top-style:solid;
+  display:inline-block;margin-right:5px;vertical-align:3px}
+.keybtn{background:none;border:1px solid transparent;border-radius:7px;padding:2px 7px;
+  font:inherit;font-size:11.5px;color:var(--muted);cursor:pointer}
+.keybtn:hover{border-color:var(--hair)}
+.keybtn.off{opacity:.4;text-decoration:line-through}
+.keybtn:disabled{cursor:default;color:var(--ink-2);font-weight:600}
+.minis{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  margin-top:10px}
+.mini-cell{border:1px solid var(--hair);border-radius:9px;padding:7px;background:var(--surface);
+  cursor:pointer;font:inherit;color:inherit;text-align:left;min-width:0}
+.mini-cell:hover{border-color:var(--est)}
+.mini-cell.on{border-color:var(--est);box-shadow:inset 0 0 0 1px var(--est)}
+.mini-cap{display:flex;flex-direction:column;gap:1px;margin-bottom:5px;font-size:11px}
+.mini-nm{font-weight:600;font-size:12px}
+.mini-cap .mono{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.map.mini{border-radius:7px}
+.cmp td.pos{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.cmp .late{color:var(--bad)}
+.cmp .risk{color:var(--warn)}
+.cmp th.opt-h{font-size:10px;text-transform:none;letter-spacing:0}
+/* The traffic curve is drawn around 1.00, not up from zero: what matters is how
+   far an hour departs from the average, and from a zero baseline a 1.20 peak and
+   a 0.87 trough look almost the same height. */
+.bars{display:flex;gap:2px;height:150px;margin-top:6px;position:relative}
+.bars .col{flex:1;display:flex;flex-direction:column;justify-content:center;
+  height:100%;position:relative}
+.bars .up,.bars .dn{width:100%}
+.bars .up{align-self:flex-end;background:var(--est-soft);border:1px solid var(--est);
+  border-bottom:none;border-radius:3px 3px 0 0}
+.bars .dn{background:var(--truth-soft);border:1px solid var(--truth);border-top:none;
+  border-radius:0 0 3px 3px}
+.bars .col.thin .up,.bars .col.thin .dn{background:transparent;border-color:var(--axis);
+  border-style:dashed}
+.bars .base{position:absolute;left:0;right:0;top:50%;border-top:1px solid var(--axis)}
+.bars .baselabel{position:absolute;right:0;top:50%;transform:translateY(-100%);
+  font-family:var(--mono);font-size:9.5px;color:var(--muted);background:var(--surface);
+  padding:0 4px}
+.axisrow{display:flex;gap:2px;margin-top:3px}
+.axisrow span{flex:1;text-align:center;font-family:var(--mono);font-size:9px;
+  color:var(--muted)}
+</style>
+
+<div class="wrap">
+<header>
+  <div>
+    <div class="eyebrow">block completion time</div>
+    <h1>What the round takes</h1>
+  </div>
+  <div class="chips" id="chips"></div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" data-tab="blocks">Blocks</button>
+  <button class="tab" role="tab" data-tab="schedule">The month ahead</button>
+  <button class="tab" role="tab" data-tab="conditions">On the road</button>
+  <button class="tab" role="tab" data-tab="new">New block</button>
+  <button class="tab" role="tab" data-tab="upload">From a spreadsheet</button>
+  <button class="tab" role="tab" data-tab="model">The estimator</button>
+</nav>
+
+<!-- ----------------------------------------------------------- schedule --->
+<div class="tabpanel hidden" id="tab-schedule">
+  <div class="panel" style="margin-bottom:15px">
+    <h2>The month ahead</h2>
+    <p class="sub">Every round here is <strong>planned</strong>, so every number on this
+    tab is a forecast - there is nothing to measure yet. The fleet, the volumes and the
+    weekday pattern come from the recorded history; the stops themselves are a realistic
+    shape to plan against, not a promise about which doors will be on the round.</p>
+    <div id="s-days" class="daystrip"></div>
+    <div id="s-problems" class="hidden"></div>
+  </div>
+
+  <div class="panel" style="margin-bottom:15px">
+    <div class="controls">
+      <select id="s-depot" aria-label="Depot"></select>
+      <select id="s-vehicle" aria-label="Vehicle"></select>
+      <select id="s-conf" aria-label="Confidence">
+        <option value="80">80% interval</option>
+        <option value="90" selected>90% interval</option>
+        <option value="95">95% interval</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="s-traffic" checked> Use the measured
+        traffic</label>
+      <label class="sub" title="What a broken delivery promise is worth when the app
+recommends an option. This is a policy, not a measurement - there is no fact in the
+records about it. Change it and the recommendation changes.">a broken promise costs
+        <input type="number" id="s-price" value="20" min="0" max="240" step="5"
+          style="width:72px"> min</label>
+      <span class="sub" id="s-count"></span>
+    </div>
+    <details style="margin-top:10px">
+      <summary class="sub">Operating limits - nothing is rejected, breaches are shown</summary>
+      <div class="controls" style="margin-top:10px">
+        <label class="sub">shortest <input type="number" id="l-min" value="180" min="0"
+          step="30" style="width:80px"> min</label>
+        <label class="sub">longest <input type="number" id="l-max" value="540" min="0"
+          step="30" style="width:80px"> min</label>
+        <label class="sub">at most <input type="number" id="l-km" value="130" min="0"
+          step="10" style="width:80px"> km</label>
+        <label class="sub">at most <input type="number" id="l-stops" value="45" min="1"
+          step="1" style="width:70px"> stops</label>
+      </div>
+    </details>
+  </div>
+
+  <div class="split">
+    <div id="s-detail"><div class="panel empty">Pick a day, then a round.</div></div>
+    <div class="tablewrap">
+      <table id="s-list"><thead><tr>
+        <th>Round</th><th>Vehicle</th><th class="num">Stops</th>
+        <th class="num">Out</th><th class="num">Back</th><th class="num">Hours</th>
+        <th>Driving</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- --------------------------------------------------------- conditions --->
+<div class="tabpanel hidden" id="tab-conditions">
+  <div class="panel" style="margin-bottom:15px">
+    <h2>On the road</h2>
+    <p class="sub" id="c-head"></p>
+    <div class="legend" style="margin-top:8px">
+      <span><i class="sw" style="background:var(--truth)"></i>measured from the records</span>
+      <span><i class="sw" style="background:var(--est)"></i>declared by somebody</span>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:15px">
+    <h3>Traffic, by the hour</h3>
+    <p class="sub">Above 1.00 is slower than this city's own all-day average, below is
+    faster. Measured, never assumed: each recorded leg is compared with what its own
+    distance says it should have taken, and the ratios are averaged by the hour the leg
+    was driven. Hours with little evidence are pulled back toward 1.00 rather than
+    allowed to swing a forecast.</p>
+    <div id="c-hours"></div>
+    <div class="split2" style="margin-top:14px">
+      <div><h3>By weekday</h3><div id="c-weekday"></div></div>
+      <div><h3>How sharply each city peaks</h3><div id="c-cities"></div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Closures and disruptions</h3>
+    <p class="sub">These are <strong>declared</strong>. A closed road leaves no trace in
+    delivery records, so somebody has to say it is closed. A closure is driven around - the
+    detour is added and the forecast gets less certain, because nobody has driven that
+    way. Anything else slows the part of a leg that passes through it.</p>
+    <div class="controls" style="margin-top:12px">
+      <select id="d-kind" aria-label="Kind"></select>
+      <input id="d-desc" placeholder="What is it? e.g. Bridge closed on the A61"
+        style="min-width:260px">
+      <select id="d-depot" aria-label="Near depot"></select>
+      <input id="d-lat" placeholder="lat" style="width:110px">
+      <input id="d-lon" placeholder="lon" style="width:110px">
+      <label class="sub">radius <input type="number" id="d-radius" value="1.5" min="0.1"
+        step="0.1" style="width:72px"> km</label>
+      <input type="date" id="d-from" aria-label="From"><input type="date" id="d-to"
+        aria-label="To">
+      <input type="time" id="d-tfrom" aria-label="From time">
+      <input type="time" id="d-tto" aria-label="To time">
+      <label class="sub">severity <input type="number" id="d-sev" value="1.8" min="1"
+        max="6" step="0.1" style="width:72px">x</label>
+      <button id="d-save">Declare it</button>
+    </div>
+    <div class="tablewrap" style="margin-top:12px;max-height:340px">
+      <table id="d-list"><thead><tr>
+        <th>Id</th><th>Kind</th><th>What</th><th>Where</th><th>When</th>
+        <th class="num">Effect</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------- blocks --->
+<div class="tabpanel" id="tab-blocks">
+  <div class="panel" style="margin-bottom:15px">
+    <div class="controls">
+      <select id="f-date" aria-label="Date"></select>
+      <select id="f-source" aria-label="Source">
+        <option value="">Recorded and entered</option>
+        <option value="recorded">Recorded only</option>
+        <option value="manual">Entered by hand</option>
+        <option value="excel">From a spreadsheet</option>
+      </select>
+      <select id="f-depot" aria-label="Depot"></select>
+      <select id="f-conf" aria-label="Confidence">
+        <option value="80">80% interval</option>
+        <option value="90" selected>90% interval</option>
+        <option value="95">95% interval</option>
+      </select>
+      <span class="sub" id="f-count"></span>
+    </div>
+  </div>
+  <div class="split">
+    <div id="detail"><div class="panel empty">Pick a block on the right.</div></div>
+    <div class="tablewrap">
+      <table id="block-list"><thead><tr>
+        <th>Block</th><th>Vehicle</th><th class="num">Stops</th>
+        <th class="num">Start</th><th>Kind</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------------------------------------------------------- new --->
+<div class="tabpanel hidden" id="tab-new">
+  <div class="panel" style="margin-bottom:15px">
+    <h2>Build a round</h2>
+    <p class="sub">Pick a depot, then click the map to drop stops in the order they will be
+    visited. The estimate updates as you go. Nothing is saved until you say so.</p>
+    <div class="controls" style="margin-top:10px">
+      <select id="n-depot" aria-label="Depot"></select>
+      <input type="date" id="n-date" aria-label="Date">
+      <input type="time" id="n-start" value="07:30" aria-label="Start time">
+      <select id="n-vt" aria-label="Vehicle type"></select>
+      <input id="n-id" placeholder="block id (auto)" size="22" aria-label="Block id">
+      <select id="n-zoom" aria-label="Map span">
+        <option value="3">3 km across</option>
+        <option value="6" selected>6 km across</option>
+        <option value="12">12 km across</option>
+        <option value="25">25 km across</option>
+      </select>
+    </div>
+    <div class="controls" style="margin-top:8px">
+      <span class="eyebrow">new stops are</span>
+      <select id="n-pt" aria-label="Point type"></select>
+      <select id="n-ps" aria-label="Parcel size"></select>
+      <input type="time" id="n-wf" aria-label="Window from" title="promised from">
+      <input type="time" id="n-wt" aria-label="Window to" title="promised to">
+      <button id="n-undo">Undo last</button>
+      <button id="n-clear">Clear all</button>
+      <button id="n-paste">Paste coordinates</button>
+      <button class="primary" id="n-save" disabled>Save block</button>
+    </div>
+    <div id="n-msg" class="sub" style="margin-top:8px"></div>
+  </div>
+  <div class="split">
+    <div class="panel">
+      <h3>Click to place stops</h3>
+      <div id="n-map"></div>
+      <div class="legend">
+        <span><i style="background:var(--ink)"></i>depot</span>
+        <span><i style="background:var(--est)"></i>stop, in visiting order</span>
+        <span>the dashed leg is the way back</span>
+      </div>
+    </div>
+    <div>
+      <div id="n-estimate"></div>
+      <div style="height:12px"></div>
+      <div class="tablewrap" style="max-height:330px">
+        <table id="n-stops"><thead><tr>
+          <th class="num">#</th><th>Type</th><th>Size</th><th>Window</th>
+          <th class="num">Leg</th><th></th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------- upload --->
+<div class="tabpanel hidden" id="tab-upload">
+  <div class="split">
+    <div class="panel">
+      <h2>Load a round from a spreadsheet</h2>
+      <p class="sub">One row per stop, in visiting order. Column names are matched loosely,
+      so <span class="mono">Stop No</span>, <span class="mono">stop_no</span> and
+      <span class="mono">sequence</span> all work. Only sequence, lat and lon are required.</p>
+      <div class="controls" style="margin:12px 0">
+        <a href="/api/template.xlsx"><button>Download the template</button></a>
+      </div>
+      <div class="drop" id="drop">
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">Drop an .xlsx here</div>
+        <div class="sub">or click to choose a file</div>
+        <input type="file" id="file" accept=".xlsx,.xlsm" class="hidden">
+      </div>
+      <div id="u-result" style="margin-top:14px"></div>
+    </div>
+    <div class="panel">
+      <h3>Then give the block its details</h3>
+      <div class="controls" style="margin-bottom:10px">
+        <select id="u-depot" aria-label="Depot"></select>
+        <input type="date" id="u-date" aria-label="Date">
+        <input type="time" id="u-start" value="07:30" aria-label="Start time">
+        <select id="u-vt" aria-label="Vehicle type"></select>
+      </div>
+      <div class="controls">
+        <input id="u-id" placeholder="block id (auto)" size="24" aria-label="Block id">
+        <button class="primary" id="u-save" disabled>Save block</button>
+      </div>
+      <div id="u-msg" class="sub" style="margin-top:10px"></div>
+      <div style="height:10px"></div>
+      <div class="tablewrap" style="max-height:420px">
+        <table id="u-stops"><thead><tr>
+          <th class="num">#</th><th>Address</th><th>Type</th><th>Size</th><th>Window</th>
+          <th class="num">Lat</th><th class="num">Lon</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- -------------------------------------------------------------- model --->
+<div class="tabpanel hidden" id="tab-model">
+  <div class="panel" style="margin-bottom:15px">
+    <h2>What the estimator learned</h2>
+    <p class="sub" id="m-head"></p>
+    <div class="note">
+      <b>Why the earliest and the latest are not the sum of per-stop extremes.</b>
+      Forty stops all landing on their best case is not a fast day, it is a fantasy, and a
+      planner told &ldquo;between 3h10 and 9h40&rdquo; has learned nothing. Errors partly
+      cancel: independent noise adds in <i>variance</i>, so a round of N stops has a spread
+      that grows like &radic;N while its length grows like N. But not everything cancels -
+      traffic, weather and who turned up miss the whole day together, and that part does not
+      shrink at all. So the spread is
+      <span class="mono">&radic;( &Sigma; per-stop variance + (common&nbsp;mode &times;
+      duration)&sup2; )</span>, and the common-mode fraction is measured from the recorded
+      rounds rather than chosen.
+    </div>
+    <div id="m-notes"></div>
+  </div>
+  <div class="grid g2">
+    <div class="panel"><h3>Travel, fitted per city</h3>
+      <p class="sub" style="font-size:12.5px">Each leg's recorded minutes regressed on the
+      road distance between its two ends. The slope is the reciprocal of speed.</p>
+      <div class="tablewrap" style="max-height:none"><table id="m-travel"><thead><tr>
+        <th>City</th><th class="num">min/km</th><th class="num">implied km/h</th>
+        <th class="num">fixed/stop</th><th class="num">resid sd</th><th class="num">legs</th>
+      </tr></thead><tbody></tbody></table></div></div>
+    <div class="panel"><h3>Time at the door</h3>
+      <p class="sub" style="font-size:12.5px">By what kind of door and what size of parcel,
+      with failed stops kept separate because a failed stop is a short stop.</p>
+      <div class="tablewrap"><table id="m-service"><thead><tr>
+        <th>Door</th><th>Parcel</th><th class="num">minutes</th><th class="num">sd</th>
+        <th class="num">n</th></tr></thead><tbody></tbody></table></div></div>
+  </div>
+  <div style="height:15px"></div>
+  <div class="grid g3" id="m-rest"></div>
+</div>
+</div>
+
+<div id="boot">Loading&hellip;</div>
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c;
+  if (x != null) e.textContent = x; return e; };
+const NS = 'http://www.w3.org/2000/svg';
+const svgEl = (t, a) => { const n = document.createElementNS(NS, t);
+  for (const k in a) n.setAttribute(k, a[k]); return n; };
+const fx = (v, d = 1) => (v == null || isNaN(v)) ? '-' : (+v).toFixed(d);
+const hm = m => { const t = Math.round(m); const d = Math.floor(t / 1440);
+  const r = t - d * 1440; return `${String(Math.floor(r / 60)).padStart(2, '0')}:`
+  + `${String(r % 60).padStart(2, '0')}` + (d ? ` (+${d}d)` : ''); };
+const dur = m => `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, '0')}m`;
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || `${path} -> ${r.status}`);
+  return body;
+}
+
+let BOOT = null, CUR = null;
+
+/* ---------------------------------------------------------------- tooltip */
+const tip = $('#tip');
+function showTip(ev, title, rows) {
+  tip.innerHTML = '';
+  tip.appendChild(el('div', 't', title));
+  rows.filter(r => r[1] != null && r[1] !== '').forEach(([k, v]) => {
+    const r = el('div', 'r'); r.appendChild(el('span', null, k));
+    r.appendChild(el('b', null, String(v))); tip.appendChild(r);
+  });
+  tip.style.opacity = 1;
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + pad, y = ev.clientY - h - pad;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - pad;
+  if (y < 8) y = ev.clientY + pad;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+const hideTip = () => { tip.style.opacity = 0; };
+addEventListener('scroll', hideTip, { passive: true });
+
+/* -------------------------------------------------------------- the map */
+/* The path is the order of visits: depot, each stop, back to the depot. It is a real
+   measurement of where the vehicle went and in what order - it is not a road route,
+   and the distances are straight lines scaled by a road factor. */
+function drawMap(route, kind, opts = {}) {
+  const W = route.width, H = route.height;
+  const small = !!opts.compact;
+  const s = svgEl('svg', { viewBox: `0 0 ${W} ${H}`,
+    class: 'map' + (small ? ' mini' : ''),
+    preserveAspectRatio: 'xMidYMid meet', role: 'img' });
+  s.appendChild(svgEl('title', {})).textContent = 'The order the stops are visited in';
+
+  const defs = svgEl('defs', {});
+  const mk = svgEl('marker', { id: 'arw', viewBox: '0 0 10 10', refX: 6, refY: 5,
+    markerWidth: 5, markerHeight: 5, orient: 'auto-start-reverse' });
+  mk.appendChild(svgEl('path', { d: 'M 0 1 L 8 5 L 0 9 z',
+    fill: kind === 'truth' ? 'var(--truth)' : 'var(--est)' }));
+  defs.appendChild(mk); s.appendChild(defs);
+
+  const D = route.depot, N = route.nodes;
+  const pts = [[D.x, D.y], ...N.map(n => [n.x, n.y])];
+
+  // the other options, behind: thinner, dashed, dimmer, because they are
+  // alternatives and not the plan
+  (opts.overlay || []).forEach(alt => {
+    const g = svgEl('g', { opacity: 0.5 });
+    g.appendChild(svgEl('title', {})).textContent = alt.name;
+    for (let i = 1; i < alt.points.length; i++) {
+      g.appendChild(svgEl('line', {
+        x1: alt.points[i - 1][0], y1: alt.points[i - 1][1],
+        x2: alt.points[i][0], y2: alt.points[i][1],
+        stroke: alt.colour, 'stroke-width': 1.3, 'stroke-dasharray': '4 3',
+        fill: 'none' }));
+    }
+    s.appendChild(g);
+  });
+
+  // the legs, each with a direction arrow at its midpoint
+  for (let i = 1; i < pts.length; i++) {
+    const [x1, y1] = pts[i - 1], [x2, y2] = pts[i];
+    // inline, not a presentation attribute: the stylesheet's .leg rule would
+    // otherwise win and the route would stay grey however it was asked to look
+    s.appendChild(svgEl('line', { x1, y1, x2, y2, class: 'leg',
+      ...(opts.emphasise
+        ? { style: `stroke:${opts.colour || 'var(--est)'};stroke-width:2.4` } : {}) }));
+    if (small) continue;
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+    const ux = (x2 - x1) / len * 7, uy = (y2 - y1) / len * 7;
+    s.appendChild(svgEl('line', { x1: mx - ux, y1: my - uy, x2: mx + ux, y2: my + uy,
+      class: 'leg', 'marker-end': 'url(#arw)',
+      stroke: kind === 'truth' ? 'var(--truth)' : 'var(--est)', 'stroke-width': 1.8 }));
+  }
+  if (N.length) {
+    const last = pts[pts.length - 1];
+    s.appendChild(svgEl('line', { x1: last[0], y1: last[1], x2: D.x, y2: D.y,
+      class: 'leg home' }));
+  }
+
+  // the depot
+  const dg = svgEl('g', {});
+  dg.appendChild(svgEl('rect', { x: D.x - 7, y: D.y - 7, width: 14, height: 14, rx: 3,
+    fill: 'var(--ink)' }));
+  const dl = svgEl('text', { x: D.x, y: D.y - 12, 'text-anchor': 'middle' });
+  dl.textContent = D.id; dg.appendChild(dl);
+  dg.addEventListener('mousemove', e => showTip(e, D.name || D.id,
+    [['Depot', D.id], ['Latitude', fx(D.lat, 5)], ['Longitude', fx(D.lon, 5)]]));
+  dg.addEventListener('mouseleave', hideTip);
+  s.appendChild(dg);
+
+  // the stops
+  N.forEach(n => {
+    const g = svgEl('g', { class: 'node' });
+    g.dataset.seq = n.sequence;
+    let fill = kind === 'truth'
+      ? (n.outcome === 'Unsuccessful' ? 'var(--bad)' : 'var(--truth)')
+      : (n.on_time === false ? 'var(--bad)' : n.at_risk ? 'var(--warn)' : 'var(--est)');
+    g.appendChild(svgEl('circle', { cx: n.x, cy: n.y, r: small ? 4 : 9.5, fill,
+      stroke: 'var(--raised)', 'stroke-width': small ? 1 : 2 }));
+    if (!small) {
+      const t = svgEl('text', { x: n.x, y: n.y + 3.2, 'text-anchor': 'middle',
+        class: 'num' });
+      t.textContent = n.sequence; g.appendChild(t);
+    }
+    g.addEventListener('mousemove', e => showTip(e,
+      `Stop ${n.sequence}${n.address ? ' - ' + n.address : ''}`, [
+        ['Arrives', n.arrival || '-'],
+        [kind === 'truth' ? '' : 'Between',
+          kind === 'truth' ? '' : (n.arrival_min ? `${n.arrival_min} and ${n.arrival_max}` : '')],
+        ['Promised', n.window_from ? `${n.window_from} - ${n.window_to}` : null],
+        ['At the door', n.service_minutes != null ? fx(n.service_minutes, 1) + ' min' : null],
+        ['Leg', `${fx(n.leg_km, 2)} km, ${fx(n.travel_minutes, 1)} min`],
+        ['Door', `${n.point_type || ''} ${n.parcel_size || ''}`.trim()],
+        ['Outcome', n.outcome],
+      ]));
+    g.addEventListener('mouseleave', hideTip);
+    g.addEventListener('click', () => opts.onPick && opts.onPick(n.sequence));
+    s.appendChild(g);
+  });
+
+  // scale bar, because distance on a drawn map means nothing without one
+  const bar = route.scale_bar;
+  const bx = 16, by = H - 16;
+  s.appendChild(svgEl('line', { x1: bx, y1: by, x2: bx + bar.px, y2: by,
+    stroke: 'var(--axis)', 'stroke-width': 2 }));
+  [0, bar.px].forEach(o => s.appendChild(svgEl('line',
+    { x1: bx + o, y1: by - 4, x2: bx + o, y2: by + 4, stroke: 'var(--axis)', 'stroke-width': 2 })));
+  const st = svgEl('text', { x: bx + bar.px + 7, y: by + 3.5 });
+  st.textContent = `${bar.km} km`; s.appendChild(st);
+  if (!small) {
+    const rt = svgEl('text', { x: W - 14, y: by + 3.5, 'text-anchor': 'end' });
+    rt.textContent = `${fx(route.total_km, 1)} km driven, road factor ${route.road_factor}`;
+    s.appendChild(rt);
+  }
+  return s;
+}
+
+function highlightStop(seq) {
+  $$('.map .node').forEach(g => g.classList.toggle('on', +g.dataset.seq === seq));
+  $$('tbody tr[data-seq]').forEach(tr => tr.classList.toggle('on', +tr.dataset.seq === seq));
+}
+
+/* ------------------------------------------------------- the real map */
+/* Two pictures of the same round, and they are not the same claim.
+
+   The drawn one is a *measurement*: these stops, in this order, with the legs
+   scaled by a road factor. Every number in this app comes from it.
+
+   The map one is a *guess at the streets*. The stops are where they really are,
+   but the line between them is either the same straight leg laid over a map -
+   which looks like a route and is not one - or a path fetched from a routing
+   service, which is a third party's opinion about roads this app has never
+   seen. Neither changes a single forecast. Both say so on the page.                */
+const MAP = {
+  tiles: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  router: 'https://router.project-osrm.org',
+  profile: 'driving',
+  mode: 'drawn',
+  lib: null,
+  roads: {},          // block id -> the fetched path, so it is asked for once
+};
+
+function loadOnce(tag, attrs) {
+  return new Promise((ok, fail) => {
+    const e = document.createElement(tag);
+    Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+    e.onload = () => ok(true);
+    e.onerror = () => fail(new Error('could not load ' + (attrs.src || attrs.href)));
+    document.head.appendChild(e);
+  });
+}
+
+async function ensureLeaflet() {
+  if (window.L) return true;
+  if (MAP.lib === false) return false;
+  try {
+    await loadOnce('link', { rel: 'stylesheet', href: '/vendor/leaflet/leaflet.css' });
+    await loadOnce('script', { src: '/vendor/leaflet/leaflet.js' });
+    MAP.lib = !!window.L;
+    return MAP.lib;
+  } catch (e) {
+    MAP.lib = false;
+    return false;
+  }
+}
+
+function straightKm(pts) {
+  const R = 6371.0088, rad = d => d * Math.PI / 180;
+  let km = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [a1, o1] = pts[i - 1], [a2, o2] = pts[i];
+    const dp = rad(a2 - a1), dl = rad(o2 - o1);
+    const h = Math.sin(dp / 2) ** 2
+      + Math.cos(rad(a1)) * Math.cos(rad(a2)) * Math.sin(dl / 2) ** 2;
+    km += 2 * R * Math.asin(Math.sqrt(h));
+  }
+  return km;
+}
+
+async function realMap(host, route, kind, key) {
+  const ok = await ensureLeaflet();
+  if (!ok) {
+    host.appendChild(el('div', 'note',
+      'The map library did not load, so there is no map to show. The drawn view '
+      + 'beside it needs nothing and is what every number here is built from.'));
+    return;
+  }
+  const D = route.depot;
+  const stops = route.nodes.filter(n => n.lat != null && n.lon != null);
+  if (!stops.length) {
+    host.appendChild(el('div', 'note', 'No stop on this round has coordinates.'));
+    return;
+  }
+  const holder = el('div');
+  holder.style.cssText = 'height:460px;border:1px solid var(--hair);border-radius:10px;'
+    + 'overflow:hidden';
+  host.appendChild(holder);
+
+  const m = L.map(holder, { scrollWheelZoom: false });
+  const tiles = L.tileLayer(MAP.tiles, { attribution: MAP.attribution, maxZoom: 19 });
+  let tileTrouble = 0;
+  tiles.on('tileerror', () => {
+    if (++tileTrouble === 6) note.innerHTML =
+      '<strong>The map tiles are not loading.</strong> This machine may have no route '
+      + 'to the tile server. The stops and the path are still placed correctly; only '
+      + 'the picture behind them is missing. An internal tile server can be set below.';
+  });
+  tiles.addTo(m);
+
+  const line = [[D.lat, D.lon], ...stops.map(n => [n.lat, n.lon]), [D.lat, D.lon]];
+  const straight = L.polyline(line, {
+    color: kind === 'truth' ? '#1f6fd0' : '#c77a12', weight: 2.5,
+    dashArray: '7 6', opacity: 0.85,
+  }).addTo(m);
+
+  L.marker([D.lat, D.lon], {
+    icon: L.divIcon({ className: '', iconSize: [18, 18], iconAnchor: [9, 9],
+      html: '<div style="width:16px;height:16px;border-radius:3px;background:#0d0d0c;'
+        + 'border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>' }),
+  }).addTo(m).bindTooltip(`${D.id} - the depot`);
+
+  stops.forEach(n => {
+    const colour = kind === 'truth'
+      ? (n.outcome === 'Unsuccessful' ? '#c4362f' : '#1f6fd0')
+      : (n.on_time === false ? '#c4362f' : n.at_risk ? '#c08a0a' : '#c77a12');
+    L.marker([n.lat, n.lon], {
+      icon: L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 10],
+        html: `<div style="width:19px;height:19px;border-radius:50%;background:${colour};`
+          + 'color:#fff;font:600 10px/19px ui-monospace,monospace;text-align:center;'
+          + `border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)">${n.sequence}</div>` }),
+    }).addTo(m).bindTooltip(
+      `Stop ${n.sequence}${n.address ? ' - ' + n.address : ''}`
+      + (n.arrival ? `<br>arrives ${n.arrival}` : ''));
+  });
+  m.fitBounds(straight.getBounds(), { padding: [26, 26] });
+
+  const note = el('div', 'note');
+  note.innerHTML = '<strong>The dashed line is the order of visits, not a road '
+    + 'route.</strong> The stops are where they really are; the line between them is '
+    + 'the straight leg this app measures, scaled by a road factor of '
+    + `${route.road_factor}. Nothing on this map changes a forecast.`;
+  host.appendChild(note);
+
+  const bar = el('div', 'controls');
+  bar.style.marginTop = '10px';
+  const btn = el('button', null, 'Trace it along the roads');
+  const out = el('span', 'sub');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    out.textContent = 'asking the router...';
+    try {
+      const coords = line.map(([a, o]) => `${o},${a}`).join(';');
+      const url = `${MAP.router.replace(/\/$/, '')}/route/v1/${MAP.profile}/${coords}`
+        + '?overview=full&geometries=geojson';
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('the router answered ' + r.status);
+      const j = await r.json();
+      const road = j.routes && j.routes[0];
+      if (!road) throw new Error('the router found no path');
+      L.polyline(road.geometry.coordinates.map(([o, a]) => [a, o]),
+        { color: '#2a7f62', weight: 4, opacity: 0.75 }).addTo(m);
+      const roadKm = road.distance / 1000;
+      const crow = straightKm(line);
+      MAP.roads[key] = roadKm;
+      out.innerHTML = `<strong>${fx(roadKm, 1)} km by road</strong> against `
+        + `${fx(crow, 1)} km as the crow flies: a road factor of `
+        + `<strong>${fx(roadKm / crow, 2)}</strong> here, where this app assumes `
+        + `${route.road_factor}. `
+        + (Math.abs(roadKm / crow - route.road_factor) > 0.12
+          ? 'Worth knowing: the assumed factor is off for this patch.'
+          : 'Close enough to the assumption.');
+    } catch (e) {
+      out.innerHTML = `<span class="err">${e.message}.</span> The router is a public `
+        + 'service and may be unreachable, rate-limited, or blocked from this machine. '
+        + 'Its address is a setting below, so an internal one can be used instead.';
+    }
+    btn.disabled = false;
+  });
+  bar.appendChild(btn);
+  bar.appendChild(out);
+  host.appendChild(bar);
+
+  const warn = el('div', 'sub');
+  warn.style.marginTop = '8px';
+  warn.innerHTML = '<strong>Before pressing that:</strong> it sends this round\'s '
+    + 'coordinates to whatever address is set as the router. The default is a public '
+    + 'demo server. For real delivery points, point it at your own.';
+  host.appendChild(warn);
+
+  const set = el('details');
+  set.innerHTML = '<summary class="sub">Where the map and the router come from</summary>';
+  const inputs = el('div', 'controls');
+  inputs.style.marginTop = '8px';
+  [['tiles', 'tile URL template', 420], ['router', 'routing service', 300],
+   ['profile', 'profile', 110]].forEach(([k, label, w]) => {
+    const i = el('input');
+    i.value = MAP[k]; i.style.width = w + 'px'; i.setAttribute('aria-label', label);
+    i.addEventListener('change', () => { MAP[k] = i.value.trim(); });
+    inputs.appendChild(el('span', 'sub', label));
+    inputs.appendChild(i);
+  });
+  set.appendChild(inputs);
+  host.appendChild(set);
+}
+
+/* A panel that shows one of the two pictures, with a switch between them. */
+function mapPanel(route, kind, opts, title, blurb, key) {
+  const p = el('div', 'panel');
+  const head = el('div');
+  head.style.cssText = 'display:flex;gap:10px;align-items:baseline;'
+    + 'justify-content:space-between;flex-wrap:wrap';
+  const l = el('div');
+  l.appendChild(el('h3', null, title));
+  l.appendChild(el('div', 'sub', blurb));
+  head.appendChild(l);
+  const sw = el('div', 'switch');
+  [['drawn', 'As measured'], ['map', 'On a map']].forEach(([k, label]) => {
+    const b = el('button', 'segbtn' + (MAP.mode === k ? ' on' : ''), label);
+    b.addEventListener('click', () => {
+      MAP.mode = k;
+      const host = p.querySelector('.mapbody');
+      host.innerHTML = '';
+      [...sw.children].forEach(c => c.classList.toggle(
+        'on', c.textContent === (k === 'drawn' ? 'As measured' : 'On a map')));
+      fill(host);
+    });
+    sw.appendChild(b);
+  });
+  head.appendChild(sw);
+  p.appendChild(head);
+  const body = el('div', 'mapbody');
+  body.style.marginTop = '10px';
+  p.appendChild(body);
+
+  function fill(host) {
+    if (MAP.mode === 'map') realMap(host, route, kind, key);
+    else host.appendChild(drawMap(route, kind, opts));
+  }
+  fill(body);
+  return p;
+}
+
+/* ------------------------------------------------------------ block view */
+function stackBar(parts, total) {
+  const w = el('div', 'stack');
+  parts.forEach(([label, v, color]) => {
+    if (v <= 0) return;
+    const d = el('div', null, (v / total > 0.09) ? `${label} ${Math.round(v)}` : '');
+    d.style.width = (100 * v / total) + '%';
+    d.style.background = color;
+    d.title = `${label}: ${fx(v, 1)} min (${fx(100 * v / total, 1)}%)`;
+    w.appendChild(d);
+  });
+  return w;
+}
+
+function renderBlock(v) {
+  CUR = v;
+  const host = clear('#detail');
+  const est = v.kind === 'estimate';
+  const p = el('div', 'panel');
+
+  const head = el('div');
+  head.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;'
+    + 'justify-content:space-between;margin-bottom:12px';
+  const left = el('div');
+  left.appendChild(el('h2', null, v.block_id));
+  left.appendChild(el('div', 'sub',
+    `${v.delivery_date} - ${[v.vehicle_id, v.vehicle_type, v.depot_id, v.city]
+      .filter(Boolean).join(' / ')}`));
+  head.appendChild(left);
+  const badges = el('div', 'chips');
+  badges.appendChild(el('span', 'badge ' + (est ? 'est' : 'truth'),
+    est ? 'estimate' : 'ground truth'));
+  if (!est) badges.appendChild(el('span', 'badge ' + (v.ok ? 'ok' : 'fail'),
+    v.ok ? 'records agree' : 'records disagree'));
+  head.appendChild(badges);
+  p.appendChild(head);
+
+  // the answer
+  if (est) {
+    p.appendChild(el('div', 'eyebrow', 'expected completion'));
+    p.appendChild(el('div', 'big est', v.completion_expected));
+    p.appendChild(el('div', 'rangeline',
+      `between ${v.completion_min} and ${v.completion_max}`
+      + `  -  ${v.confidence}% of the time`));
+    p.appendChild(el('div', 'rangeline',
+      `${dur(v.expected_minutes)} over ${v.stops} stops`
+      + `  (${dur(v.min_minutes)} to ${dur(v.max_minutes)})`));
+  } else {
+    p.appendChild(el('div', 'eyebrow', 'completion time'));
+    p.appendChild(el('div', 'big', v.completion_time));
+    p.appendChild(el('div', 'rangeline',
+      `${dur(v.duration_minutes)} over ${v.stops} stops, `
+      + `${fx(v.minutes_per_stop, 2)} min each`));
+  }
+
+  // where the time goes
+  p.appendChild(el('div', 'eyebrow', 'where the time goes')).style.marginTop = '14px';
+  const total = est ? v.expected_minutes : v.duration_minutes;
+  const parts = [
+    ['depot', est ? v.depot_minutes : v.depot_minutes, 'var(--muted)'],
+    ['travel', v.travel_minutes, est ? 'var(--est)' : 'var(--truth)'],
+    ['doors', v.service_minutes, 'var(--good)'],
+    ['home', est ? v.return_minutes : v.return_leg_minutes, 'var(--axis)'],
+  ];
+  p.appendChild(stackBar(parts, total));
+  const kv = el('div'); kv.style.marginTop = '10px';
+  parts.forEach(([k, val]) => {
+    const r = el('div', 'kv'); r.appendChild(el('span', 'k', k));
+    r.appendChild(el('span', 'v', `${fx(val, 1)} min`)); kv.appendChild(r);
+  });
+  if (est) {
+    const r = el('div', 'kv');
+    r.appendChild(el('span', 'k', 'spread: independent / common to the day'));
+    r.appendChild(el('span', 'v',
+      `${fx(v.independent_sd, 1)} / ${fx(v.common_mode_sd, 1)} min`));
+    kv.appendChild(r);
+  }
+  const r2 = el('div', 'kv');
+  r2.appendChild(el('span', 'k', 'driven distance'));
+  r2.appendChild(el('span', 'v', `${fx(v.route.total_km, 1)} km`));
+  kv.appendChild(r2);
+  p.appendChild(kv);
+
+  // checks or basis
+  if (est) {
+    const n = el('div', 'note');
+    n.innerHTML = '<b>This has not happened yet.</b> Every number above is a forecast from '
+      + `${v.basis.blocks_behind_it} recorded rounds: `
+      + `${v.basis.implied_speed_kmh} km/h in ${v.basis.city}, `
+      + `${v.basis.fixed_per_stop} min to park per stop, `
+      + `${v.basis.depot_minutes} min at the depot for a ${v.basis.vehicle_type}, `
+      + `and ${fx(100 * v.basis.common_mode, 1)}% of the day that misses together.`;
+    p.appendChild(n);
+  } else {
+    const n = el('div', 'note truth');
+    n.innerHTML = `<b>This is what happened.</b> Derived from ${v.stops} recorded stops; `
+      + `the return leg is the residual against the recorded duration. `
+      + `Source: ${v.completion_source}.`;
+    p.appendChild(n);
+    const ul = el('div'); ul.style.marginTop = '8px';
+    v.checks.forEach(c => {
+      const row = el('div', 'kv');
+      const k = el('span', 'k', c.name);
+      k.style.color = c.ok ? 'var(--muted)' : 'var(--bad)';
+      row.appendChild(k);
+      row.appendChild(el('span', 'v', c.ok ? 'ok' : 'FAIL'));
+      row.title = c.detail;
+      ul.appendChild(row);
+    });
+    p.appendChild(ul);
+  }
+  host.appendChild(p);
+
+  // the map, in either of its two forms
+  const mp = mapPanel(v.route, est ? 'estimate' : 'truth', { onPick: highlightStop },
+    'The path it takes',
+    'Depot, then every stop in visiting order, then back. As measured it is a drawing '
+    + 'of the order of visits; on a map the same stops sit where they really are.',
+    v.block_id);
+  mp.style.marginTop = '15px';
+  const lg = el('div', 'legend');
+  lg.innerHTML = est
+    ? '<span><i style="background:var(--est)"></i>inside its window</span>'
+      + '<span><i style="background:var(--warn)"></i>could miss it</span>'
+      + '<span><i style="background:var(--bad)"></i>expected to miss it</span>'
+    : '<span><i style="background:var(--truth)"></i>delivered</span>'
+      + '<span><i style="background:var(--bad)"></i>unsuccessful</span>';
+  mp.appendChild(lg);
+  host.appendChild(mp);
+
+  // the stops
+  const sp = el('div', 'panel'); sp.style.marginTop = '15px';
+  sp.appendChild(el('h3', null, est ? 'Stop by stop, forecast' : 'Stop by stop, recorded'));
+  const tw = el('div', 'tablewrap');
+  const t = el('table');
+  t.innerHTML = '<thead><tr><th class="num">#</th><th>Address</th><th>Door</th>'
+    + '<th class="num">Leg</th><th class="num">Travel</th><th class="num">Door time</th>'
+    + `<th>${est ? 'Arrives (earliest - latest)' : 'Arrived'}</th><th>Promised</th>`
+    + `<th>${est ? 'Window' : 'Outcome'}</th></tr></thead>`;
+  const tb = el('tbody');
+  v.route.nodes.forEach(n => {
+    const tr = el('tr', 'pick'); tr.dataset.seq = n.sequence;
+    const cells = [
+      [n.sequence, 'num mono'],
+      [n.address || '-', null],
+      [`${n.point_type} / ${n.parcel_size}`, null],
+      [fx(n.leg_km, 2) + ' km', 'num mono'],
+      [fx(n.travel_minutes, 1), 'num mono'],
+      [fx(n.service_minutes, 1), 'num mono'],
+      [est ? `${n.arrival}  (${n.arrival_min} - ${n.arrival_max})` : n.arrival, 'mono'],
+      [n.window_from ? `${n.window_from}-${n.window_to}` : '-', 'mono'],
+      [est ? (n.on_time === false ? 'misses' : n.at_risk ? 'at risk' : 'inside')
+           : (n.outcome || '-'), null],
+    ];
+    cells.forEach(([val, cls]) => tr.appendChild(el('td', cls, String(val))));
+    if (!est && n.outcome === 'Unsuccessful') tr.style.color = 'var(--bad)';
+    if (est && n.on_time === false) tr.style.color = 'var(--bad)';
+    tr.addEventListener('click', () => highlightStop(n.sequence));
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb); tw.appendChild(t); sp.appendChild(tw);
+  if (v.block && v.block.source !== 'recorded') {
+    const del = el('button', 'danger', 'Delete this block');
+    del.style.marginTop = '12px';
+    del.addEventListener('click', async () => {
+      if (!confirm(`Delete ${v.block_id}?`)) return;
+      await api('/api/block/' + encodeURIComponent(v.block_id), { method: 'DELETE' });
+      clear('#detail').appendChild(el('div', 'panel empty', 'Deleted.'));
+      loadBlocks();
+    });
+    sp.appendChild(del);
+  }
+  host.appendChild(sp);
+}
+
+const clear = sel => { const n = $(sel); n.innerHTML = ''; return n; };
+
+/* ---------------------------------------------------------- blocks list */
+async function loadBlocks() {
+  const date = $('#f-date').value, source = $('#f-source').value,
+        depot = $('#f-depot').value;
+  const p = new URLSearchParams();
+  if (date) p.set('date', date);
+  if (source) p.set('source', source);
+  if (depot) p.set('depot_id', depot);
+  const d = await api('/api/blocks?' + p);
+  // the detail belongs to a block that may no longer be in the list
+  if (CUR && !d.rows.some(b => b.block_id === CUR.block_id)) {
+    CUR = null;
+    clear('#detail').appendChild(el('div', 'panel empty', 'Pick a block on the right.'));
+  }
+  const tb = clear('#block-list tbody');
+  $('#f-count').textContent = `${d.rows.length} blocks`;
+  if (!d.rows.length) {
+    const tr = el('tr'); const td = el('td', null, 'Nothing here.');
+    td.colSpan = 5; tr.appendChild(td); tb.appendChild(tr); return;
+  }
+  d.rows.forEach(b => {
+    const tr = el('tr', 'pick');
+    tr.appendChild(el('td', 'mono', b.block_id));
+    tr.appendChild(el('td', null, b.vehicle_id || '-'));
+    tr.appendChild(el('td', 'num mono', b.stops));
+    tr.appendChild(el('td', 'num mono', b.start_time));
+    const k = el('td');
+    k.appendChild(el('span', 'badge ' + (b.source === 'recorded' ? 'truth' : 'est'),
+      b.source === 'recorded' ? 'recorded' : b.source));
+    tr.appendChild(k);
+    tr.addEventListener('click', async () => {
+      $$('#block-list tbody tr').forEach(x => x.classList.remove('on'));
+      tr.classList.add('on');
+      clear('#detail').appendChild(el('div', 'panel empty', 'Working...'));
+      try {
+        renderBlock(await api(`/api/block/${encodeURIComponent(b.block_id)}`
+          + `?confidence=${$('#f-conf').value}`));
+      } catch (e) {
+        clear('#detail').appendChild(el('div', 'panel err', e.message));
+      }
+    });
+    tb.appendChild(tr);
+  });
+}
+
+/* ------------------------------------------------------------ new block */
+const NEW = { stops: [], depot: null };
+
+function newProjection() {
+  const d = BOOT.depots.find(x => x.depot_id === $('#n-depot').value);
+  const km = +$('#n-zoom').value, W = 700, H = 500;
+  const scale = (W - 60) / km;                       // pixels per km
+  return { d, W, H, scale,
+    xy: (lat, lon) => [W / 2 + (lon - d.lon) * Math.cos(d.lat * Math.PI / 180) * 111.32 * scale,
+                       H / 2 - (lat - d.lat) * 111.32 * scale],
+    ll: (x, y) => [d.lat + (H / 2 - y) / (111.32 * scale),
+                   d.lon + (x - W / 2) / (Math.cos(d.lat * Math.PI / 180) * 111.32 * scale)] };
+}
+
+function drawNewMap() {
+  const P = newProjection();
+  const host = clear('#n-map');
+  const s = svgEl('svg', { viewBox: `0 0 ${P.W} ${P.H}`, class: 'map',
+    preserveAspectRatio: 'xMidYMid meet' });
+
+  for (let i = 1; i <= 6; i++) {                     // distance rings from the depot
+    const r = i * (P.scale * (+$('#n-zoom').value / 12));
+    if (r > Math.max(P.W, P.H)) break;
+    s.appendChild(svgEl('circle', { cx: P.W / 2, cy: P.H / 2, r, fill: 'none',
+      stroke: 'var(--grid)', 'stroke-width': 1 }));
+  }
+  const pts = [[P.W / 2, P.H / 2], ...NEW.stops.map(st => P.xy(st.lat, st.lon))];
+  for (let i = 1; i < pts.length; i++) {
+    s.appendChild(svgEl('line', { x1: pts[i - 1][0], y1: pts[i - 1][1],
+      x2: pts[i][0], y2: pts[i][1], class: 'leg' }));
+  }
+  if (NEW.stops.length) {
+    const l = pts[pts.length - 1];
+    s.appendChild(svgEl('line', { x1: l[0], y1: l[1], x2: P.W / 2, y2: P.H / 2,
+      class: 'leg home' }));
+  }
+  s.appendChild(svgEl('rect', { x: P.W / 2 - 7, y: P.H / 2 - 7, width: 14, height: 14,
+    rx: 3, fill: 'var(--ink)' }));
+  NEW.stops.forEach((st, i) => {
+    const [x, y] = P.xy(st.lat, st.lon);
+    const g = svgEl('g', { class: 'node' });
+    g.appendChild(svgEl('circle', { cx: x, cy: y, r: 9.5, fill: 'var(--est)',
+      stroke: 'var(--raised)', 'stroke-width': 2 }));
+    const t = svgEl('text', { x, y: y + 3.2, 'text-anchor': 'middle', class: 'num' });
+    t.textContent = i + 1; g.appendChild(t);
+    g.addEventListener('click', ev => { ev.stopPropagation();
+      NEW.stops.splice(i, 1); renderNew(); });
+    g.addEventListener('mousemove', ev => showTip(ev, `Stop ${i + 1}`,
+      [['Type', st.point_type], ['Size', st.parcel_size],
+       ['Window', st.promised_from ? `${st.promised_from} - ${st.promised_to}` : null],
+       ['', 'click to remove']]));
+    g.addEventListener('mouseleave', hideTip);
+    s.appendChild(g);
+  });
+  s.addEventListener('click', ev => {
+    const r = s.getBoundingClientRect();
+    const x = (ev.clientX - r.left) / r.width * P.W;
+    const y = (ev.clientY - r.top) / r.height * P.H;
+    const [lat, lon] = P.ll(x, y);
+    NEW.stops.push({ sequence: NEW.stops.length + 1, lat: +lat.toFixed(6),
+      lon: +lon.toFixed(6), point_type: $('#n-pt').value, parcel_size: $('#n-ps').value,
+      promised_from: $('#n-wf').value || null, promised_to: $('#n-wt').value || null });
+    renderNew();
+  });
+  host.appendChild(s);
+}
+
+async function renderNew() {
+  NEW.stops.forEach((s, i) => s.sequence = i + 1);
+  drawNewMap();
+  const tb = clear('#n-stops tbody');
+  NEW.stops.forEach((s, i) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'num mono', i + 1));
+    [['point_type', BOOT.point_types], ['parcel_size', BOOT.parcel_sizes]]
+      .forEach(([field, options]) => {
+        const td = el('td'); const sel = el('select');
+        options.forEach(o => { const op = el('option', null, o); op.value = o;
+          if (s[field] === o) op.selected = true; sel.appendChild(op); });
+        sel.style.cssText = 'padding:3px 5px;font-size:12px';
+        sel.addEventListener('change', () => { s[field] = sel.value; renderNew(); });
+        td.appendChild(sel); tr.appendChild(td);
+      });
+    tr.appendChild(el('td', 'mono',
+      s.promised_from ? `${s.promised_from}-${s.promised_to || ''}` : '-'));
+    tr.appendChild(el('td', 'num mono', '-'));
+    const rm = el('td'); const b = el('button', null, 'remove');
+    b.style.cssText = 'padding:2px 8px;font-size:11.5px';
+    b.addEventListener('click', () => { NEW.stops.splice(i, 1); renderNew(); });
+    rm.appendChild(b); tr.appendChild(rm);
+    tb.appendChild(tr);
+  });
+  $('#n-save').disabled = !NEW.stops.length;
+
+  const host = clear('#n-estimate');
+  if (!NEW.stops.length) {
+    host.appendChild(el('div', 'panel empty',
+      'Click the map to drop the first stop.'));
+    return;
+  }
+  try {
+    const v = await api('/api/estimate', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payloadFromForm('n')) });
+    const p = el('div', 'panel');
+    p.appendChild(el('div', 'eyebrow', 'expected completion'));
+    p.appendChild(el('div', 'big est', v.completion_expected));
+    p.appendChild(el('div', 'rangeline',
+      `between ${v.completion_min} and ${v.completion_max} - ${v.confidence}% of the time`));
+    p.appendChild(el('div', 'rangeline',
+      `${dur(v.expected_minutes)} over ${v.stops} stops, ${fx(v.route_km, 1)} km`));
+    const kv = el('div'); kv.style.marginTop = '10px';
+    [['depot', v.depot_minutes], ['travel', v.travel_minutes],
+     ['doors', v.service_minutes], ['home', v.return_minutes],
+     ['expected failures', v.expected_failures]].forEach(([k, val]) => {
+      const r = el('div', 'kv'); r.appendChild(el('span', 'k', k));
+      r.appendChild(el('span', 'v', fx(val, 1))); kv.appendChild(r);
+    });
+    p.appendChild(kv);
+    // update the leg column now we know the distances
+    v.stop_estimates.forEach((se, i) => {
+      const row = $('#n-stops tbody').children[i];
+      if (row) row.children[4].textContent = fx(se.leg_km, 2) + ' km';
+    });
+    host.appendChild(p);
+  } catch (e) {
+    host.appendChild(el('div', 'panel err', e.message));
+  }
+}
+
+function payloadFromForm(prefix, stops) {
+  return {
+    block_id: $(`#${prefix}-id`).value.trim() || null,
+    delivery_date: $(`#${prefix}-date`).value,
+    depot_id: $(`#${prefix}-depot`).value,
+    start_time: $(`#${prefix}-start`).value || '07:30',
+    vehicle_type: $(`#${prefix}-vt`).value,
+    source: prefix === 'n' ? 'manual' : 'excel',
+    stops: (stops || NEW.stops).map((s, i) => ({ ...s, sequence: i + 1 })),
+  };
+}
+
+/* --------------------------------------------------------------- upload */
+let UP = [];
+async function handleFile(f) {
+  const host = clear('#u-result');
+  host.appendChild(el('div', 'sub', 'Reading ' + f.name + '...'));
+  const fd = new FormData(); fd.append('file', f);
+  let d;
+  try {
+    d = await api('/api/upload', { method: 'POST', body: fd });
+  } catch (e) {
+    clear('#u-result').appendChild(el('div', 'err', e.message));
+    return;
+  }
+  clear('#u-result');
+  const sum = el('div');
+  sum.appendChild(el('div', d.ok ? 'ok' : 'err',
+    d.ok ? `Read ${d.stop_count} stops from "${d.sheet}".`
+         : `${d.errors.length} problem${d.errors.length > 1 ? 's' : ''} in "${d.sheet}" - `
+           + `nothing has been saved.`));
+  sum.appendChild(el('div', 'sub', 'Columns found: ' + d.columns_found.join(', ')));
+  $('#u-result').appendChild(sum);
+  if (d.errors.length) {
+    const tw = el('div', 'tablewrap'); tw.style.marginTop = '10px';
+    const t = el('table');
+    t.innerHTML = '<thead><tr><th class="num">Row</th><th>Column</th><th>Problem</th></tr></thead>';
+    const tb = el('tbody');
+    d.errors.forEach(e => {
+      const tr = el('tr');
+      tr.appendChild(el('td', 'num mono', e.row));
+      tr.appendChild(el('td', 'mono', e.column));
+      tr.appendChild(el('td', null, e.problem));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); tw.appendChild(t); $('#u-result').appendChild(tw);
+  }
+  UP = d.ok ? d.stops : [];
+  if (d.meta.date) $('#u-date').value = d.meta.date;
+  if (d.meta.starttime) $('#u-start').value = d.meta.starttime;
+  if (d.meta.blockid) $('#u-id').value = d.meta.blockid;
+  if (d.meta.depotid && BOOT.depots.some(x => x.depot_id === d.meta.depotid))
+    $('#u-depot').value = d.meta.depotid;
+  if (d.meta.vehicletype && BOOT.vehicle_types.includes(d.meta.vehicletype))
+    $('#u-vt').value = d.meta.vehicletype;
+
+  const tb = clear('#u-stops tbody');
+  UP.forEach(s => {
+    const tr = el('tr');
+    [[s.sequence, 'num mono'], [s.address || '-', null], [s.point_type, null],
+     [s.parcel_size, null],
+     [s.promised_from ? `${s.promised_from}-${s.promised_to || ''}` : '-', 'mono'],
+     [fx(s.lat, 5), 'num mono'], [fx(s.lon, 5), 'num mono']]
+      .forEach(([v, c]) => tr.appendChild(el('td', c, String(v))));
+    tb.appendChild(tr);
+  });
+  $('#u-save').disabled = !UP.length;
+  $('#u-msg').textContent = UP.length
+    ? 'Check the details on the right, then save.' : '';
+}
+
+/* ---------------------------------------------------------------- model */
+async function renderModel() {
+  const c = await api('/api/calibration');
+  $('#m-head').textContent =
+    `Fitted from ${c.blocks_used} recorded rounds and ${c.stops_used.toLocaleString()} stops. `
+    + `Straight-line distances are multiplied by ${c.road_factor} to approximate road distance.`;
+  const n = clear('#m-notes');
+  (c.notes || []).forEach(x => n.appendChild(el('div', 'sub', '- ' + x)));
+
+  const tb = clear('#m-travel tbody');
+  Object.entries(c.travel_per_km).sort().forEach(([city, d]) => {
+    if (!d.n) return;
+    const tr = el('tr');
+    [[city === '*' ? 'all cities' : city, null], [fx(d.mean, 2), 'num mono'],
+     [d.mean > 0 ? fx(60 / d.mean, 1) : '-', 'num mono'],
+     [fx(c.travel_fixed[city], 2), 'num mono'],
+     [fx(c.travel_resid_sd[city], 2), 'num mono'],
+     [d.n.toLocaleString(), 'num mono']].forEach(([v, cl]) =>
+      tr.appendChild(el('td', cl, String(v))));
+    if (city === '*') tr.style.color = 'var(--muted)';
+    tb.appendChild(tr);
+  });
+
+  const sb = clear('#m-service tbody');
+  Object.entries(c.service)
+    .filter(([k]) => !k.endsWith('|*') && k !== '*|*')
+    .sort((a, b) => b[1].n - a[1].n).slice(0, 26)
+    .forEach(([k, d]) => {
+      const [pt, ps] = k.split('|');
+      const tr = el('tr');
+      [[pt, null], [ps, null], [fx(d.mean, 2), 'num mono'],
+       [fx(d.sd, 2), 'num mono'], [d.n.toLocaleString(), 'num mono']]
+        .forEach(([v, cl]) => tr.appendChild(el('td', cl, String(v))));
+      sb.appendChild(tr);
+    });
+
+  const rest = clear('#m-rest');
+  const mk = (title, rows) => {
+    const p = el('div', 'panel');
+    p.appendChild(el('h3', null, title));
+    rows.forEach(([k, v]) => {
+      const r = el('div', 'kv'); r.appendChild(el('span', 'k', k));
+      r.appendChild(el('span', 'v', String(v))); p.appendChild(r);
+    });
+    rest.appendChild(p);
+  };
+  mk('At the depot, by vehicle', Object.entries(c.depot).filter(([k]) => k !== '*')
+    .map(([k, d]) => [k, `${fx(d.mean, 1)} min  (sd ${fx(d.sd, 1)}, n=${d.n})`]));
+  mk('The way home and failures', [
+    ['return leg', `${fx(c.return_per_km, 2)} min/km (sd ${fx(c.return_sd, 1)})`],
+    ['a failed stop', `${fx(c.service_failed.mean, 2)} min (n=${c.service_failed.n})`],
+    ...Object.entries(c.failure_rate).filter(([k]) => k !== '*')
+      .map(([k, v]) => [`fails at a ${k.toLowerCase()}`, fx(100 * v, 1) + '%']),
+  ]);
+  mk('Common to the whole day', [
+    ['common mode', fx(100 * c.common_mode, 1) + '% of the duration'],
+    ['what that means', 'the part that does not shrink with the round'],
+  ]);
+}
+
+/* ------------------------------------------------------- the month ahead */
+/* Everything on this tab is a forecast. There is nothing here to measure yet, so
+   every number wears the forecast colour and says what it rests on. */
+const SCH = { day: null, block: null, options: [], pick: null, overlay: false,
+  overlayOff: new Set(['as_received']) };
+
+const limits = () => ({
+  min_minutes: +$('#l-min').value || undefined,
+  max_minutes: +$('#l-max').value || undefined,
+  max_km: +$('#l-km').value || undefined,
+  max_stops: +$('#l-stops').value || undefined,
+});
+const limitQuery = () => Object.entries(limits())
+  .filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${v}`).join('&');
+
+/* Rows the forecast had to leave out. Showing nothing here would mean an office
+   quietly planning its December on three quarters of its rounds. */
+function showProblems(resp) {
+  const host = $('#s-problems');
+  if (!host) return;
+  host.innerHTML = '';
+  const n = resp.problem_count || 0;
+  if (!n) { host.classList.add('hidden'); return; }
+  host.classList.remove('hidden');
+  const d = el('div', 'note');
+  d.style.borderLeftColor = 'var(--bad)';
+  d.innerHTML = `<strong>${n} ${n === 1 ? 'row is' : 'rows are'} unusable and `
+    + `${n === 1 ? 'has' : 'have'} been left out of these figures.</strong> `
+    + 'A round is only forecast from the stops that can be placed on a map.';
+  const ul = el('div', 'sub');
+  ul.style.marginTop = '6px';
+  (resp.problems || []).slice(0, 8).forEach(p => ul.appendChild(el('div', null, '- ' + p)));
+  if (n > 8) ul.appendChild(el('div', null, `...and ${n - 8} more`));
+  d.appendChild(ul);
+  host.appendChild(d);
+}
+
+async function renderDays() {
+  const strip = clear('#s-days');
+  const daysResp = await api('/api/schedule/days?days=35');
+  const rows = daysResp.rows;
+  showProblems(daysResp);
+  if (!rows.length) {
+    strip.appendChild(el('div', 'sub',
+      'Nothing is planned yet. Run: python3 -m block_truth.schedule --days 30'));
+    return;
+  }
+  if (!SCH.day) SCH.day = rows[0].date;
+  rows.forEach(r => {
+    const b = el('button', 'day');
+    b.setAttribute('aria-pressed', String(r.date === SCH.day));
+    b.appendChild(el('div', 'd', `${r.weekday} ${r.date.slice(8)}/${r.date.slice(5, 7)}`));
+    b.appendChild(el('div', 'h', `${fx(r.expected_hours, 0)}h`));
+    b.appendChild(el('div', 'n', `${r.blocks} rounds`));
+    if (r.disruptions) {
+      const w = el('div', 'n warn', `${r.disruptions} hit`);
+      w.title = `${r.disruptions} rounds run into something declared on this day`;
+      b.appendChild(w);
+    }
+    b.title = `${r.date}: ${r.blocks} rounds, ${r.stops.toLocaleString()} stops, `
+      + `${r.vehicles} vehicles across ${r.depots} depots.\n`
+      + `Predicted ${fx(r.expected_hours, 1)} vehicle hours, `
+      + `${r.hours_low}-${r.hours_high} at 90%.\n`
+      + 'The day total is tighter in relative terms than any one round: '
+      + 'the rounds do not all overrun together.';
+    b.addEventListener('click', () => {
+      SCH.day = r.date; SCH.block = null;
+      clear('#s-detail').appendChild(el('div', 'panel empty', 'Pick a round.'));
+      renderDays(); loadSchedule();
+    });
+    strip.appendChild(b);
+  });
+}
+
+async function loadSchedule() {
+  const q = new URLSearchParams({ confidence: $('#s-conf').value,
+    traffic: $('#s-traffic').checked ? 'true' : 'false' });
+  if (SCH.day) q.set('date', SCH.day);
+  if ($('#s-depot').value) q.set('depot_id', $('#s-depot').value);
+  if ($('#s-vehicle').value) q.set('vehicle_id', $('#s-vehicle').value);
+  const sched = await api(`/api/schedule?${q}&${limitQuery()}`);
+  const rows = sched.rows;
+  showProblems(sched);
+  const tb = clear('#s-list tbody');
+  $('#s-count').textContent = `${rows.length} planned rounds`
+    + (rows.some(r => r.breaches.length) ? ` - ${rows.filter(r => r.breaches.length).length}`
+      + ' over a limit' : '');
+  const veh = new Set();
+  rows.forEach(r => {
+    veh.add(r.vehicle_id);
+    const tr = el('tr');
+    tr.dataset.block = r.block_id;
+    [[r.block_id.replace(/-P$/, ''), 'mono'], [r.vehicle_id || '', 'mono'],
+     [r.stops, 'num mono'], [r.start_time, 'num mono'],
+     [r.completion_expected, 'num mono'],
+     [fx(r.expected_minutes / 60, 2) + 'h', 'num mono'],
+     [r.chosen_key ? OPTION_NAMES[r.chosen_key] || r.chosen_key : 'as planned', 'sub']]
+      .forEach(([v, c]) => tr.appendChild(el('td', c, String(v))));
+    if (r.breaches.length) {
+      tr.style.color = 'var(--bad)';
+      tr.title = r.breaches.join('; ');
+    }
+    tr.addEventListener('click', () => pickRound(r.block_id));
+    tb.appendChild(tr);
+  });
+  const vs = $('#s-vehicle');
+  if (vs.dataset.day !== SCH.day) {
+    const cur = vs.value;
+    vs.innerHTML = '<option value="">All vehicles</option>';
+    [...veh].sort().forEach(v => {
+      const o = el('option', null, v); o.value = v; vs.appendChild(o);
+    });
+    vs.value = cur; vs.dataset.day = SCH.day;
+  }
+  $$('#s-list tbody tr').forEach(tr =>
+    tr.classList.toggle('on', tr.dataset.block === SCH.block));
+}
+
+/* Each option gets its own line on the map. The selected one is drawn in the
+   forecast colour like everything else that has not happened; the others are
+   thinner, dashed and dimmer, because they are alternatives and not the plan. */
+const ROUTE_COLOURS = { as_planned: '#1f6fd0', shortest: '#2a7f62',
+  windows: '#8a5cc7', steady: '#c77a12', as_received: '#8b8984' };
+const routeColour = k => ROUTE_COLOURS[k] || '#8b8984';
+const OPTION_NAMES = { as_planned: 'as planned', shortest: 'least driving',
+  windows: 'promises first', steady: 'steadiest', as_received: 'as it arrived' };
+
+function queryFor(extra = '') {
+  return `confidence=${$('#s-conf').value}`
+    + `&traffic=${$('#s-traffic').checked ? 'true' : 'false'}`
+    + `&minutes_per_missed_window=${+$('#s-price').value || 0}`
+    + `&${limitQuery()}${extra}`;
+}
+
+/* Every option visits the same stops in a different order, so one set of screen
+   coordinates serves them all: take the positions from the route being drawn and
+   look each option's order up in it. Doing it by the stop's own id rather than by
+   its position is what keeps the lines honest - a line that connected the Nth
+   point of one option to the Nth of another would be a picture of nothing. */
+function otherPaths(d, chosen) {
+  const xy = {};
+  chosen.route.nodes.forEach((n, i) => {
+    const s = chosen.stops_detail[i];
+    if (s) xy[s.plan_sequence] = [n.x, n.y];
+  });
+  const D = chosen.route.depot;
+  return d.options.filter(o => o.key !== chosen.key).map(o => ({
+    key: o.key,
+    name: o.name,
+    colour: routeColour(o.key),
+    points: [[D.x, D.y], ...o.order.map(seq => xy[seq]).filter(Boolean), [D.x, D.y]],
+  }));
+}
+
+async function pickRound(block_id, keepPick = false) {
+  SCH.block = block_id;
+  $$('#s-list tbody tr').forEach(tr =>
+    tr.classList.toggle('on', tr.dataset.block === block_id));
+  const host = clear('#s-detail');
+  host.appendChild(el('div', 'panel empty', 'Working out the options...'));
+  const d = await api(`/api/itineraries/${encodeURIComponent(block_id)}?${queryFor()}`);
+  SCH.options = d.options;
+  // the recommended one is selected to start with; whatever the operator was
+  // looking at is kept when this is only a refresh
+  const want = keepPick && d.options.some(o => o.key === SCH.pick)
+    ? SCH.pick : (d.recommendation.key || d.options[0].key);
+  SCH.pick = want;
+  renderRound(d);
+}
+
+async function chooseOption(block_id, key) {
+  const d = await api(
+    `/api/itineraries/${encodeURIComponent(block_id)}/choose?key=${key}&${queryFor()}`,
+    { method: 'POST' });
+  SCH.options = d.options;
+  SCH.pick = (d.options.find(o => o.chosen) || d.options[0]).key;
+  renderRound(d);
+  loadSchedule();
+  renderDays();
+}
+
+function renderRound(d) {
+  const host = clear('#s-detail');
+  const b = d.block;
+  const p = el('div', 'panel');
+  const head = el('div');
+  head.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;'
+    + 'justify-content:space-between';
+  const l = el('div');
+  l.appendChild(el('h2', null, b.block_id.replace(/-P$/, '')));
+  l.appendChild(el('div', 'sub',
+    `${b.delivery_date} - ${b.vehicle_id} / ${b.vehicle_type} / ${b.depot_id} / ${b.city}`));
+  head.appendChild(l);
+  const badge = el('span', 'badge est', 'PLANNED - NOT YET DRIVEN');
+  badge.style.cssText = 'background:var(--est-soft);color:var(--est)';
+  head.appendChild(badge);
+  p.appendChild(head);
+
+  const chosen = d.options.find(o => o.key === SCH.pick) || d.options[0];
+  const c = d.compare;
+  p.appendChild(el('div', 'note',
+    c.agree ? 'Every way of driving this round comes out the same: the stops are '
+      + 'close enough together that the order barely matters.'
+      : `Between the best and the worst of these: ${fx(c.minutes_between_best_and_worst, 0)} `
+      + `minutes, ${fx(c.km_between_best_and_worst, 0)} km and `
+      + `${c.windows_between_best_and_worst} delivery windows. They are not the same `
+      + 'plan with different names - pick by what matters today.'));
+
+  // what the app would do, and why - stated so it can be disagreed with
+  if (d.recommendation && d.recommendation.key) {
+    const r = d.recommendation;
+    const n = el('div', 'note');
+    n.innerHTML = `<strong>Recommended: ${r.name}.</strong> ${r.why}. `
+      + `A broken promise is priced at ${fx(r.minutes_per_missed_window, 0)} minutes `
+      + '- that is a policy, not a measurement, and the box above changes it.'
+      + (r.all_over_the_limits
+        ? ' <strong>Every option breaks an operating limit</strong>, so this is the '
+          + 'least bad one rather than a legal one.' : '');
+    p.appendChild(n);
+  }
+  if (d.chosen && d.chosen.key) {
+    const n = el('div', 'note truth');
+    n.innerHTML = `<strong>Driving '${d.chosen.key}'</strong>, chosen by `
+      + `${d.chosen.by} at ${d.chosen.at}.`
+      + (d.chosen.is_recommended ? ''
+        : ' That is not the recommendation - which is allowed, and recorded.')
+      + ' Every forecast of this round now follows that choice.';
+    p.appendChild(n);
+  }
+
+  const opts = el('div', 'opts');
+  d.options.forEach(o => {
+    const card = el('button', 'opt' + (o.chosen ? ' is-chosen' : ''));
+    card.setAttribute('aria-pressed', String(o.key === SCH.pick));
+    if (o.chosen || o.recommended) {
+      const pills = el('div', 'pills');
+      if (o.chosen) pills.appendChild(el('span', 'pill chosen', 'chosen'));
+      if (o.recommended) pills.appendChild(el('span', 'pill rec', 'recommended'));
+      card.appendChild(pills);
+    }
+    card.appendChild(el('div', 'nm', o.name));
+    card.appendChild(el('div', 'big2', dur(o.expected_minutes)));
+    card.appendChild(el('div', 'sub',
+      `${o.completion_min} to ${o.completion_max} - ${o.confidence}% of the time`));
+    const kv = el('div');
+    kv.style.cssText = 'margin-top:7px';
+    const row = (k, v, title) => {
+      const r = el('div', 'kv'); r.appendChild(el('span', 'k', k));
+      r.appendChild(el('span', 'v', v)); if (title) r.title = title;
+      kv.appendChild(r);
+    };
+    row('back at', o.completion_expected);
+    row('driving', `${fx(o.route_km, 1)} km`);
+    row('windows kept', o.windows_total
+      ? `${o.windows_met}/${o.windows_total}` : '-',
+      'Stops reached inside the window that was promised to the customer');
+    if (o.windows_at_risk) row('could go either way', String(o.windows_at_risk));
+    if (o.wait_minutes > 0) row('waiting at doors', `${fx(o.wait_minutes, 0)} min`,
+      'Time the vehicle spends outside a door waiting for its window to open');
+    if (o.conditions.detour_km > 0) row('detour', `${fx(o.conditions.detour_km, 1)} km`,
+      'Extra distance to get around something declared closed');
+    card.appendChild(kv);
+    const tags = [];
+    if (o.key === c.fastest) tags.push('fastest');
+    if (o.key === c.shortest) tags.push('least driving');
+    if (o.key === c.most_promises_kept) tags.push('most promises kept');
+    if (o.key === c.most_predictable) tags.push('most predictable');
+    if (tags.length) card.appendChild(el('span', 'tag', tags.join(' - ')));
+    if (o.breaches.length) {
+      const br = el('div', 'err'); br.style.marginTop = '6px';
+      br.textContent = o.breaches.join('; ');
+      card.appendChild(br);
+    }
+    card.appendChild(el('div', 'sub',
+      o.why + ' Gives up: ' + o.gives_up.charAt(0).toLowerCase() + o.gives_up.slice(1)));
+    card.addEventListener('click', () => { SCH.pick = o.key; renderRound(d); });
+    opts.appendChild(card);
+  });
+  p.appendChild(opts);
+
+  // commit the one being looked at
+  const act = el('div');
+  act.style.cssText = 'display:flex;gap:9px;flex-wrap:wrap;align-items:center;'
+    + 'margin-top:12px';
+  if (!chosen.chosen) {
+    const use = el('button', 'use', `Drive "${chosen.name}" - apply it to this round`);
+    use.addEventListener('click', () => chooseOption(b.block_id, chosen.key));
+    act.appendChild(use);
+    act.appendChild(el('span', 'sub',
+      'The round is reordered and every later forecast of it follows this choice.'));
+  } else {
+    act.appendChild(el('span', 'sub', 'This is the order the round is in.'));
+    const reset = el('button', 'ghost reset', 'back to the manifest order');
+    reset.addEventListener('click', async () => {
+      await api(`/api/itineraries/${encodeURIComponent(b.block_id)}/reset`,
+        { method: 'POST' });
+      pickRound(b.block_id); loadSchedule(); renderDays();
+    });
+    act.appendChild(reset);
+  }
+  p.appendChild(act);
+  host.appendChild(p);
+
+  // the selected route, drawn - with the others behind it if asked for
+  const mp = el('div', 'panel');
+  const mhead = el('div');
+  mhead.style.cssText = 'display:flex;gap:10px;align-items:baseline;'
+    + 'justify-content:space-between;flex-wrap:wrap';
+  mhead.appendChild(el('h3', null, `${chosen.name}: the path it takes`));
+  const msw = el('div', 'switch');
+  [['drawn', 'As measured'], ['map', 'On a map']].forEach(([k, label]) => {
+    const btn = el('button', 'segbtn' + (MAP.mode === k ? ' on' : ''), label);
+    btn.addEventListener('click', () => { MAP.mode = k; renderRound(d); });
+    msw.appendChild(btn);
+  });
+  mhead.appendChild(msw);
+  mp.appendChild(mhead);
+  mp.appendChild(el('div', 'sub',
+    'Depot, then every stop in visiting order, then back. This is the order of visits, '
+    + 'not a road route: there is no road network in the data, so legs are straight '
+    + 'lines scaled by a road factor.'));
+  const over = el('label', 'chk');
+  if (MAP.mode === 'map') over.classList.add('hidden');
+  over.style.margin = '8px 0 2px';
+  const cb = el('input');
+  cb.type = 'checkbox'; cb.checked = SCH.overlay;
+  cb.addEventListener('change', () => { SCH.overlay = cb.checked; renderRound(d); });
+  over.appendChild(cb);
+  over.appendChild(el('span', null, 'trace the other options over it'));
+  mp.appendChild(over);
+  if (SCH.overlay && MAP.mode !== 'map') {
+    // Three routes over thirty stops is a hairball, so each line can be taken
+    // off. The manifest order starts off, because it crosses the patch a dozen
+    // times and tells you nothing you cannot read in its own thumbnail.
+    const key = el('div', 'routekey');
+    d.options.forEach(o => {
+      const on = o.key === chosen.key || !SCH.overlayOff.has(o.key);
+      const s = el('button', 'keybtn' + (on ? '' : ' off'));
+      const i = el('i');
+      i.style.borderTopColor = routeColour(o.key);
+      if (o.key !== chosen.key) i.style.borderTopStyle = 'dashed';
+      s.appendChild(i);
+      s.appendChild(el('span', null,
+        `${o.name} - ${dur(o.expected_minutes)}, ${fx(o.route_km, 1)} km`));
+      if (o.key === chosen.key) {
+        s.disabled = true;
+        s.title = 'the one being drawn in full';
+      } else {
+        s.addEventListener('click', () => {
+          SCH.overlayOff.has(o.key) ? SCH.overlayOff.delete(o.key)
+            : SCH.overlayOff.add(o.key);
+          renderRound(d);
+        });
+      }
+      key.appendChild(s);
+    });
+    mp.appendChild(key);
+  }
+  if (MAP.mode === 'map') {
+    realMap(mp, chosen.route, 'estimate', b.block_id + '|' + chosen.key);
+  } else {
+    mp.appendChild(drawMap(chosen.route, 'estimate', {
+      onPick: highlightStop,
+      emphasise: SCH.overlay,
+      colour: routeColour(chosen.key),
+      overlay: SCH.overlay
+        ? otherPaths(d, chosen).filter(a => !SCH.overlayOff.has(a.key)) : null,
+    }));
+  }
+
+  // one thumbnail per option: the honest way to compare several paths, because
+  // every line gets its own picture instead of fighting for the same one
+  mp.appendChild(el('h3', null, 'All of them, side by side'))
+    .style.marginTop = '16px';
+  mp.appendChild(el('div', 'sub',
+    'The same stops, each option in its own frame, drawn to the same scale. '
+    + 'Click one to see it in full above.'));
+  const strip = el('div', 'minis');
+  d.options.forEach(o => {
+    const cell = el('button', 'mini-cell' + (o.key === chosen.key ? ' on' : ''));
+    const cap = el('div', 'mini-cap');
+    cap.appendChild(el('span', 'mini-nm', o.name.replace(/ \(=.*$/, '')));
+    cap.appendChild(el('span', 'mono',
+      `${dur(o.expected_minutes)} - ${fx(o.route_km, 0)} km - ${o.windows_met}/${o.windows_total}`));
+    cell.appendChild(cap);
+    cell.appendChild(drawMap(o.route, 'estimate',
+      { compact: true, emphasise: true, colour: routeColour(o.key) }));
+    cell.addEventListener('click', () => { SCH.pick = o.key; renderRound(d); });
+    strip.appendChild(cell);
+  });
+  mp.appendChild(strip);
+  const cond = chosen.conditions;
+  const bits = [];
+  if (cond.traffic_used) bits.push(`traffic ${fx(cond.traffic_factor_mean, 2)}x on average, `
+    + `worst leg ${fx(cond.traffic_factor_worst, 2)}x `
+    + `(${fx(cond.minutes_from_traffic, 0)} min of this round)`);
+  if (cond.disruptions_hit.length) bits.push(
+    `runs into ${cond.disruptions_hit.join(', ')} - `
+    + `${fx(cond.minutes_from_disruptions, 0)} min and ${fx(cond.detour_km, 1)} km of detour`);
+  if (bits.length) mp.appendChild(el('div', 'note', bits.join('; ') + '.'));
+  if (cond.stops_inside_a_closure.length) {
+    const n = el('div', 'note');
+    n.style.borderLeftColor = 'var(--bad)';
+    n.innerHTML = `<strong>Stops ${cond.stops_inside_a_closure.join(', ')} are inside `
+      + 'something declared closed.</strong> No route fixes that - they need moving to '
+      + 'another day or another vehicle. The forecast still delivers them, so treat it '
+      + 'as optimistic.';
+    mp.appendChild(n);
+  }
+  host.appendChild(mp);
+
+  // every option, stop by stop: where each one goes and when it gets there
+  const cmp = el('div', 'panel');
+  cmp.appendChild(el('h3', null, 'Every option, stop by stop'));
+  cmp.appendChild(el('div', 'sub',
+    'One row per stop, in the order the work arrived. Each column is one option: '
+    + 'the position it visits that stop at, and the time it is forecast to arrive. '
+    + 'Red is a promise missed, amber one that could go either way. Click a row to '
+    + 'find it on the map.'));
+  const cwrap = el('div', 'tablewrap');
+  cwrap.style.maxHeight = '460px';
+  const ct = el('table', 'cmp');
+  const thead = el('thead');
+  const hr = el('tr');
+  ['', 'promised', 'door'].forEach(h => hr.appendChild(el('th', null, h)));
+  d.options.forEach(o => {
+    const th = el('th', 'num opt-h');
+    th.colSpan = 2;
+    th.style.color = routeColour(o.key);
+    th.textContent = o.name.replace(/ \(=.*$/, '');
+    th.title = `${o.name} - ${dur(o.expected_minutes)}, ${fx(o.route_km, 1)} km`;
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+  const hr2 = el('tr');
+  ['on the manifest', 'window', 'type'].forEach(h => hr2.appendChild(el('th', null, h)));
+  d.options.forEach(() => {
+    hr2.appendChild(el('th', 'num', '#'));
+    hr2.appendChild(el('th', 'num', 'arrives'));
+  });
+  thead.appendChild(hr2);
+  ct.appendChild(thead);
+
+  // index every option by the stop it is talking about
+  const perOption = d.options.map(o => {
+    const m = {};
+    o.order.forEach((seq, i) => {
+      m[seq] = { pos: i + 1, est: o.stop_estimates[i] || {} };
+    });
+    return m;
+  });
+  const base = [...(d.options[0].stops_detail || [])].sort(
+    (a, b2) => (a.manifest_sequence ?? a.plan_sequence)
+      - (b2.manifest_sequence ?? b2.plan_sequence));
+  const ctb = el('tbody');
+  base.forEach(s => {
+    const tr = el('tr');
+    tr.dataset.plan = s.plan_sequence;
+    tr.appendChild(el('td', 'num mono', String(s.manifest_sequence ?? '-')));
+    tr.appendChild(el('td', 'mono',
+      s.promised_from ? `${s.promised_from}-${s.promised_to}` : '-'));
+    tr.appendChild(el('td', null, `${s.point_type}/${s.parcel_size}`));
+    perOption.forEach(m => {
+      const hit = m[s.plan_sequence];
+      const pos = el('td', 'pos', hit ? String(hit.pos) : '-');
+      const at = el('td', 'pos', hit ? (hit.est.arrival_time || '-') : '-');
+      if (hit && hit.est.on_time === false) { pos.className += ' late'; at.className += ' late'; }
+      else if (hit && hit.est.at_risk) { pos.className += ' risk'; at.className += ' risk'; }
+      tr.appendChild(pos); tr.appendChild(at);
+    });
+    tr.addEventListener('click', () => {
+      const hit = perOption[d.options.indexOf(chosen)][s.plan_sequence];
+      if (hit) highlightStop(hit.pos);
+    });
+    ctb.appendChild(tr);
+  });
+  ct.appendChild(ctb);
+  cwrap.appendChild(ct);
+  cmp.appendChild(cwrap);
+  host.appendChild(cmp);
+
+  // the stops, in the selected order
+  const sp = el('div', 'panel');
+  sp.appendChild(el('h3', null, `${chosen.name}: stop by stop`));
+  const wrap = el('div', 'tablewrap'); wrap.style.maxHeight = '420px';
+  const t = el('table');
+  t.innerHTML = '<thead><tr><th class="num">#</th><th class="num">on the manifest</th>'
+    + '<th class="num">arrives</th><th>earliest - latest</th><th>promised</th>'
+    + '<th class="num">leg km</th><th>door</th></tr></thead>';
+  const tb = el('tbody');
+  chosen.route.nodes.forEach((n, i) => {
+    const se = chosen.stop_estimates[i] || {};
+    const tr = el('tr'); tr.dataset.seq = n.sequence;
+    const windowCell = n.window_from ? `${n.window_from} - ${n.window_to}` : '-';
+    [[n.sequence, 'num mono'],
+     [chosen.stops_detail[i] ? (chosen.stops_detail[i].manifest_sequence ?? '-') : '-',
+       'num mono'],
+     [se.arrival_time || n.arrival || '-', 'num mono'],
+     [se.arrival_min ? `${se.arrival_min} - ${se.arrival_max}` : '-', 'mono'],
+     [windowCell, 'mono'], [fx(n.leg_km, 2), 'num mono'],
+     [`${n.point_type} / ${n.parcel_size}`, null]]
+      .forEach(([v, c]) => tr.appendChild(el('td', c, String(v))));
+    if (se.on_time === false) tr.style.color = 'var(--bad)';
+    else if (se.at_risk) tr.style.color = 'var(--warn)';
+    tr.addEventListener('click', () => highlightStop(n.sequence));
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb); wrap.appendChild(t); sp.appendChild(wrap);
+  host.appendChild(sp);
+}
+
+/* ------------------------------------------------------- on the road */
+async function renderConditions() {
+  const d = await api('/api/conditions'
+    + (SCH.day ? `?date=${SCH.day}` : ''));
+  const t = d.traffic;
+  $('#c-head').textContent = t.legs_used
+    ? `${(t.notes[0] || '').charAt(0).toUpperCase()}${(t.notes[0] || '').slice(1)}.`
+    : 'No recorded legs yet, so the day is assumed flat.';
+
+  // the hourly curve, as bars around 1.00
+  const host = clear('#c-hours');
+  const bars = el('div', 'bars');
+  const hours = t.hour;
+  // half the chart height stands for the biggest departure from 1.00 there is,
+  // with a floor so a flat day does not get magnified into drama
+  const span = Math.max(0.12, ...hours.map(h => Math.abs(h.factor - 1)));
+  hours.forEach(h => {
+    const col = el('div', 'col' + (h.legs < 80 ? ' thin' : ''));
+    const dev = h.factor - 1;
+    const bar = el('div', dev >= 0 ? 'up' : 'dn');
+    bar.style.height = `${Math.min(50, Math.abs(dev) / span * 50)}%`;
+    col.appendChild(bar);
+    col.title = `${String(h.hour).padStart(2, '0')}:00 - ${fx(h.factor, 3)}x`
+      + ` (${dev >= 0 ? '+' : ''}${fx(100 * dev, 1)}% against this city's own average)`
+      + `\nfrom ${h.legs.toLocaleString()} recorded legs`
+      + (h.legs < 80 ? '\nToo little evidence to say much: pulled back toward 1.00.' : '');
+    bars.appendChild(col);
+  });
+  bars.appendChild(el('div', 'base'));
+  bars.appendChild(el('div', 'baselabel', '1.00 - the day average'));
+  host.appendChild(bars);
+  const ax = el('div', 'axisrow');
+  hours.forEach(h => ax.appendChild(el('span', null, h.hour % 3 === 0 ? String(h.hour) : '')));
+  host.appendChild(ax);
+  host.appendChild(el('div', 'legend')).innerHTML =
+    '<span><i class="sw" style="background:var(--est)"></i>slower than average</span>'
+    + '<span><i class="sw" style="background:var(--truth-soft);border:1px solid var(--truth)">'
+    + '</i>faster</span><span><i class="sw" style="border:1px dashed var(--axis)"></i>'
+    + 'little or no evidence at this hour</span>';
+
+  const wd = clear('#c-weekday');
+  t.weekday.forEach(w => {
+    const r = el('div', 'kv');
+    r.appendChild(el('span', 'k', w.name));
+    r.appendChild(el('span', 'v', w.legs ? `${fx(w.factor, 3)}x` : 'no rounds'));
+    r.title = `${w.legs.toLocaleString()} legs`;
+    wd.appendChild(r);
+  });
+
+  const ct = clear('#c-cities');
+  const amps = Object.entries(t.city_amplitude).sort((a, b) => b[1] - a[1]);
+  if (!amps.length) ct.appendChild(el('div', 'sub', 'Not enough legs per city yet.'));
+  amps.forEach(([city, a]) => {
+    const r = el('div', 'kv');
+    r.appendChild(el('span', 'k', city));
+    r.appendChild(el('span', 'v', `${fx(a, 2)}x the curve`));
+    r.title = `${city} shows ${fx(a, 2)} times the national curve's departure from 1.00. `
+      + 'Above 1 means its peaks bite harder than average.';
+    ct.appendChild(r);
+  });
+
+  // the declared ones
+  const kinds = $('#d-kind');
+  if (!kinds.options.length) {
+    d.kinds.forEach(k => { const o = el('option', null, k); o.value = k; kinds.appendChild(o); });
+  }
+  const tb = clear('#d-list tbody');
+  if (!d.disruptions.length) {
+    const tr = el('tr'); const td = el('td', 'sub', 'Nothing declared. '
+      + 'The forecasts on the month tab assume clear roads apart from the usual traffic.');
+    td.colSpan = 7; tr.appendChild(td); tb.appendChild(tr);
+  }
+  d.disruptions.forEach(x => {
+    const tr = el('tr');
+    const when = `${x.from_date}${x.to_date !== x.from_date ? ' to ' + x.to_date : ''}`
+      + (x.from_time ? `, ${x.from_time}-${x.to_time}` : ', all day');
+    [[x.disruption_id, 'mono'], [x.kind, null], [x.description, null],
+     [`${fx(x.lat, 4)}, ${fx(x.lon, 4)} - ${fx(x.radius_km, 1)} km`, 'mono'],
+     [when, 'mono'],
+     [x.kind === 'closure' ? 'driven around' : `${fx(x.severity, 1)}x slower`, 'num mono']]
+      .forEach(([v, c]) => tr.appendChild(el('td', c, String(v))));
+    const td = el('td');
+    const del = el('button', 'ghost', 'remove');
+    del.addEventListener('click', async () => {
+      await api(`/api/disruption/${x.disruption_id}`, { method: 'DELETE' });
+      await api('/api/calibration?refresh=true');
+      renderConditions();
+      if (SCH.day) { renderDays(); loadSchedule(); }
+    });
+    td.appendChild(del); tr.appendChild(td);
+    tb.appendChild(tr);
+  });
+}
+
+/* ----------------------------------------------------------------- tabs */
+const TABS = ['blocks', 'schedule', 'conditions', 'new', 'upload', 'model'];
+function showTab(id) {
+  if (!TABS.includes(id)) id = 'blocks';
+  TABS.forEach(t => {
+    $('#tab-' + t).classList.toggle('hidden', t !== id);
+    $(`.tab[data-tab="${t}"]`).setAttribute('aria-selected', String(t === id));
+  });
+  history.replaceState(null, '', '#' + id);
+  hideTip();
+  if (id === 'model') renderModel();
+  if (id === 'new') renderNew();
+  if (id === 'schedule' && !$('#s-days').children.length) {
+    renderDays().then(loadSchedule);
+  }
+  if (id === 'conditions') renderConditions();
+}
+
+/* ----------------------------------------------------------------- boot */
+async function boot() {
+  BOOT = await api('/api/bootstrap');
+  const c = BOOT.counts;
+  const chips = clear('#chips');
+  [[`${c.blocks} blocks`], [`${c.stops.toLocaleString()} stops`],
+   [`${c.recorded} recorded`], [`${c.planned} planned`], [`${c.entered} entered`],
+   [`${BOOT.depots.length} depots`]].forEach(([t]) =>
+    chips.appendChild(el('span', 'chip', t)));
+
+  const fill = (sel, items, label, value = x => x, text = x => x) => {
+    const n = $(sel); n.innerHTML = '';
+    if (label) n.appendChild(el('option', null, label)).value = '';
+    items.forEach(i => { const o = el('option', null, text(i)); o.value = value(i);
+      n.appendChild(o); });
+  };
+  fill('#f-date', BOOT.dates, 'All dates');
+  fill('#f-depot', BOOT.depots, 'All depots', d => d.depot_id,
+    d => `${d.depot_id} - ${d.city}`);
+  ['n', 'u'].forEach(p => {
+    fill(`#${p}-depot`, BOOT.depots, null, d => d.depot_id, d => `${d.depot_id} - ${d.city}`);
+    fill(`#${p}-vt`, BOOT.vehicle_types, null);
+    $(`#${p}-vt`).value = 'Large Van';
+  });
+  fill('#n-pt', BOOT.point_types, null);
+  fill('#n-ps', BOOT.parcel_sizes, null);
+  $('#n-ps').value = 'Medium';
+  const today = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  $('#n-date').value = today; $('#u-date').value = today;
+  if (BOOT.dates.length) $('#f-date').value = BOOT.dates[0];
+
+  // the month ahead, and the road
+  fill('#s-depot', BOOT.depots, 'All depots', d => d.depot_id,
+    d => `${d.depot_id} - ${d.city}`);
+  fill('#d-depot', BOOT.depots, 'Not tied to a depot', d => d.depot_id,
+    d => `${d.depot_id} - ${d.city}`);
+  $('#s-vehicle').innerHTML = '<option value="">All vehicles</option>';
+  $('#d-from').value = today; $('#d-to').value = today;
+  ['#s-depot', '#s-vehicle', '#s-conf', '#s-traffic', '#s-price',
+   '#l-min', '#l-max', '#l-km', '#l-stops'].forEach(s =>
+    $(s).addEventListener('change', () => {
+      // keep whatever the operator was looking at; only the numbers change
+      loadSchedule().then(() => { if (SCH.block) pickRound(SCH.block, true); });
+    }));
+  $('#d-depot').addEventListener('change', () => {
+    const d = BOOT.depots.find(x => x.depot_id === $('#d-depot').value);
+    if (d) { $('#d-lat').value = d.lat; $('#d-lon').value = d.lon; }
+  });
+  $('#d-save').addEventListener('click', async () => {
+    const body = {
+      kind: $('#d-kind').value, description: $('#d-desc').value.trim(),
+      lat: parseFloat($('#d-lat').value), lon: parseFloat($('#d-lon').value),
+      radius_km: parseFloat($('#d-radius').value),
+      from_date: $('#d-from').value, to_date: $('#d-to').value,
+      from_time: $('#d-tfrom').value || null, to_time: $('#d-tto').value || null,
+      severity: parseFloat($('#d-sev').value),
+      depot_id: $('#d-depot').value || null,
+    };
+    const btn = $('#d-save'); const was = btn.textContent;
+    btn.textContent = 'Saving...';
+    try {
+      await api('/api/disruption', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      $('#d-desc').value = '';
+      await renderConditions();
+      if (SCH.day) { await renderDays(); await loadSchedule();
+        if (SCH.block) pickRound(SCH.block); }
+    } catch (e) { alert(e.message); }
+    btn.textContent = was;
+  });
+
+  $$('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  ['#f-date', '#f-source', '#f-depot'].forEach(s =>
+    $(s).addEventListener('change', loadBlocks));
+  $('#f-conf').addEventListener('change', () => {
+    const on = $('#block-list tbody tr.on');
+    if (on) on.click();
+  });
+  ['#n-depot', '#n-zoom'].forEach(s => $(s).addEventListener('change', renderNew));
+  ['#n-date', '#n-start', '#n-vt'].forEach(s => $(s).addEventListener('change', renderNew));
+  $('#n-undo').addEventListener('click', () => { NEW.stops.pop(); renderNew(); });
+  $('#n-clear').addEventListener('click', () => { NEW.stops = []; renderNew(); });
+  $('#n-paste').addEventListener('click', () => {
+    const txt = prompt('One stop per line: lat, lon');
+    if (!txt) return;
+    txt.split('\n').forEach(line => {
+      const m = line.split(/[,;\t ]+/).filter(Boolean).map(Number);
+      if (m.length >= 2 && isFinite(m[0]) && isFinite(m[1])) {
+        NEW.stops.push({ sequence: NEW.stops.length + 1, lat: m[0], lon: m[1],
+          point_type: $('#n-pt').value, parcel_size: $('#n-ps').value,
+          promised_from: null, promised_to: null });
+      }
+    });
+    renderNew();
+  });
+  $('#n-save').addEventListener('click', async () => {
+    $('#n-msg').textContent = 'Saving...';
+    try {
+      const v = await api('/api/block', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadFromForm('n')) });
+      $('#n-msg').innerHTML = `Saved <b>${v.block_id}</b>. It is in the Blocks tab.`;
+      NEW.stops = []; $('#n-id').value = '';
+      renderNew(); BOOT = await api('/api/bootstrap'); loadBlocks();
+    } catch (e) { $('#n-msg').innerHTML = `<span class="err">${e.message}</span>`; }
+  });
+
+  const drop = $('#drop'), fileInput = $('#file');
+  drop.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => fileInput.files[0]
+    && handleFile(fileInput.files[0]));
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => e.dataTransfer.files[0]
+    && handleFile(e.dataTransfer.files[0]));
+  $('#u-save').addEventListener('click', async () => {
+    $('#u-msg').textContent = 'Saving...';
+    try {
+      const v = await api('/api/block', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadFromForm('u', UP)) });
+      $('#u-msg').innerHTML = `Saved <b>${v.block_id}</b>. It is in the Blocks tab.`;
+      UP = []; $('#u-save').disabled = true;
+      BOOT = await api('/api/bootstrap'); loadBlocks();
+    } catch (e) { $('#u-msg').innerHTML = `<span class="err">${e.message}</span>`; }
+  });
+
+  await loadBlocks();
+  showTab(location.hash.slice(1) || 'blocks');
+  $('#boot').remove();
+}
+
+boot().catch(e => {
+  const b = $('#boot');
+  if (b) { b.style.color = 'var(--bad)';
+    b.textContent = 'Could not load: ' + e.message
+      + '  -  is the API running?  uvicorn block_truth.api:app --port 8100'; }
+});
+</script>

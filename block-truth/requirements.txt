@@ -1,0 +1,13 @@
+# The ground-truth calculation and the estimator need nothing but the standard
+# library; `python3 -m block_truth` works with none of this installed.
+#
+# The HTTP service:
+fastapi
+uvicorn[standard]
+python-multipart        # file uploads on /api/upload
+
+# Reading and writing workbooks:
+openpyxl
+
+# The walked-block half fits its model with a least-squares solve:
+numpy

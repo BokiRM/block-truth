@@ -1,0 +1,7 @@
+Leaflet 1.9.4, from the npm package `leaflet@1.9.4`, BSD-2-Clause (LICENSE).
+
+Vendored rather than loaded from a CDN, on purpose. The rest of this page asks
+nothing of the network and works in a building with no route to the internet;
+pulling the map library from cdnjs would have quietly ended that. Tiles still
+need somewhere to come from, but that somewhere can be an internal tile server -
+the URL is a setting on the page.
